@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Chat</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; margin: 2rem }
+        #messages { border: 1px solid #ddd; height: 300px; overflow:auto; padding: .5rem }
+    </style>
+</head>
+<body>
+    <h2>Simple Chat</h2>
+    <div id="messages"></div>
+    <form id="chatForm">
+        <input id="from" placeholder="Your name" required />
+        <input id="text" placeholder="Message" required />
+        <button type="submit">Send</button>
+    </form>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script src="/js/chat.js"></script>
+</body>
+</html>
