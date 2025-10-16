@@ -14,8 +14,12 @@ public class Packet {
     private final String ivBase64;
     private final long sizeBytes;
     private final String source; // "TX" or "RX"
-    private String plaintext; // For decrypted content
+    private String plaintext; // For decrypted content (with UI annotations)
+    private String originalPlaintext; // Original message for signature verification
     private String ciphertext; // For encrypted content display
+    private String signerPublicKeyPem; // Public key used for signature (PEM format)
+    private String decryptedFilePath; // Path to decrypted file for signature verification
+    private boolean isFilePacket; // True if this is a file packet
 
     public Packet(UUID id, Instant time, boolean hasSignature, String algoSummary,
                   String base64Cipher, String base64WrappedKey, String base64Signature,
@@ -45,6 +49,14 @@ public class Packet {
     public String getSource() { return source; }
     public String getPlaintext() { return plaintext; }
     public void setPlaintext(String plaintext) { this.plaintext = plaintext; }
+    public String getOriginalPlaintext() { return originalPlaintext; }
+    public void setOriginalPlaintext(String originalPlaintext) { this.originalPlaintext = originalPlaintext; }
     public String getCiphertext() { return ciphertext; }
     public void setCiphertext(String ciphertext) { this.ciphertext = ciphertext; }
+    public String getSignerPublicKeyPem() { return signerPublicKeyPem; }
+    public void setSignerPublicKeyPem(String signerPublicKeyPem) { this.signerPublicKeyPem = signerPublicKeyPem; }
+    public String getDecryptedFilePath() { return decryptedFilePath; }
+    public void setDecryptedFilePath(String decryptedFilePath) { this.decryptedFilePath = decryptedFilePath; }
+    public boolean isFilePacket() { return isFilePacket; }
+    public void setFilePacket(boolean filePacket) { this.isFilePacket = filePacket; }
 }

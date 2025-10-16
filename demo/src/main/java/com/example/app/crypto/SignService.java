@@ -1,6 +1,7 @@
 package com.example.app.crypto;
 
 import com.example.app.domain.VerifyResult;
+import java.security.PublicKey;
 
 public interface SignService {
     
@@ -14,4 +15,9 @@ public interface SignService {
      * Verify signature against plaintext
      */
     VerifyResult verify(String plaintext, String base64Signature, String publicKeyPem);
+    
+    /**
+     * Parse PEM format public key to PublicKey object
+     */
+    PublicKey parsePemPublicKey(String pem) throws Exception;
 }

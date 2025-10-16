@@ -68,7 +68,8 @@ public class RealSignService implements SignService {
         }
     }
     
-    private PublicKey parsePemPublicKey(String pem) throws Exception {
+    @Override
+    public PublicKey parsePemPublicKey(String pem) throws Exception {
         // Remove PEM headers and decode Base64
         String publicKeyPEM = pem
             .replace("-----BEGIN PUBLIC KEY-----", "")

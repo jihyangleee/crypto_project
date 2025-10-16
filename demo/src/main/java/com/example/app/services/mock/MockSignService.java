@@ -37,4 +37,10 @@ public class MockSignService implements SignService {
             return new VerifyResult("", "", false);
         }
     }
+    
+    @Override
+    public java.security.PublicKey parsePemPublicKey(String pem) throws Exception {
+        // Mock implementation - just throw exception as this is not used in mock mode
+        throw new UnsupportedOperationException("Mock implementation does not support PEM parsing");
+    }
 }

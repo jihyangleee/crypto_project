@@ -39,6 +39,7 @@ public class MainViewController {
     private ChatServer chatServer;
     private Thread serverThread;
     private String currentWrappedSessionKey = ""; // Store RSA-wrapped AES key for display
+    private String currentPeerPublicKeyPem = ""; // Store current peer's public key (PEM format)
     
     // Data
     private final ObservableList<Packet> sentPackets = FXCollections.observableArrayList();
@@ -291,6 +292,17 @@ public class MainViewController {
             // Set callback for when peer public key is received
             chatServer.setOnPeerKeyReceived(peerKey -> {
                 Platform.runLater(() -> {
+                    // Convert public key to PEM for storage
+                    try {
+                        byte[] encoded = peerKey.getEncoded();
+                        String pem = "-----BEGIN PUBLIC KEY-----\n" +
+                                    Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(encoded) +
+                                    "\n-----END PUBLIC KEY-----";
+                        currentPeerPublicKeyPem = pem;
+                    } catch (Exception e) {
+                        addLog("ERROR", "Key Conversion Failed", e.getMessage());
+                    }
+                    
                     addPeerPublicKeyToList("Client", peerKey);
                     addLog("INFO", "Key Exchange", "Received client's public key");
                 });
@@ -327,12 +339,36 @@ public class MainViewController {
                             "RX"
                         );
                         
-                        // Store the already-decrypted plaintext
-                        receivedPacket.setPlaintext(msgData.plaintext);
+                        // Store original plaintext for signature verification
+                        receivedPacket.setOriginalPlaintext(msgData.plaintext);
+                        
+                        // Store the already-decrypted plaintext with signature verification status for display
+                        String plaintextWithStatus = msgData.plaintext;
+                        if (msgData.signature != null) {
+                            plaintextWithStatus += "\n\n=== Digital Signature ===\n";
+                            plaintextWithStatus += "Status: " + (msgData.signatureVerified ? "✓ VERIFIED" : "✗ FAILED") + "\n";
+                            plaintextWithStatus += "Algorithm: SHA256withRSA\n";
+                            plaintextWithStatus += "Verified with: Client's Public Key";
+                        }
+                        receivedPacket.setPlaintext(plaintextWithStatus);
                         
                         sentPackets.add(receivedPacket);
-                        addLog("INFO", "Message Received", "Received encrypted " + msgData.type + " from client (" + 
-                            msgData.plaintext.getBytes().length + " bytes)");
+                        
+                        // Log with prominent signature verification status
+                        if (msgData.signature != null) {
+                            if (msgData.signatureVerified) {
+                                addLog("SUCCESS", "✓ Signature VERIFIED", 
+                                    "Message signature is VALID - authenticated from client (" + 
+                                    msgData.plaintext.getBytes().length + " bytes)");
+                            } else {
+                                addLog("ERROR", "✗ Signature FAILED", 
+                                    "Message signature is INVALID - verification failed! (" + 
+                                    msgData.plaintext.getBytes().length + " bytes)");
+                            }
+                        } else {
+                            addLog("INFO", "Message Received", "Received encrypted " + msgData.type + " from client (" + 
+                                msgData.plaintext.getBytes().length + " bytes) [No signature]");
+                        }
                     } catch (Exception e) {
                         addLog("ERROR", "Failed to process received message", e.getMessage());
                     }
@@ -436,6 +472,9 @@ public class MainViewController {
                         filePacket.setPlaintext(plaintextContent);
                         // Store encrypted content as ciphertext
                         filePacket.setCiphertext(ciphertextContent);
+                        // Mark as file packet and store decrypted file path
+                        filePacket.setFilePacket(true);
+                        filePacket.setDecryptedFilePath(fileData.decryptedFilePath);
                         
                         sentPackets.add(filePacket);
                         addLog("INFO", "File Received", "Received file: " + fileData.filename + " (" + 
@@ -765,12 +804,6 @@ public class MainViewController {
     private void onVerifySignature() {
         if (selectedPacket == null) return;
         
-        String plaintext = decryptedArea.getText();
-        if (plaintext.isEmpty()) {
-            showAlert("Error", "Please decrypt the message first");
-            return;
-        }
-        
         // Get peer's public key from the Key List
         if (receivedKeys.isEmpty()) {
             showAlert("Error", "No peer public key available. Cannot verify signature.");
@@ -780,11 +813,68 @@ public class MainViewController {
         // Use the first received key (most recent peer)
         String peerPublicKeyPem = receivedKeys.get(0).getPublicKeyPem();
         
-        VerifyResult result = signService.verify(
-            plaintext,
-            selectedPacket.getBase64Signature(),
-            peerPublicKeyPem
-        );
+        VerifyResult result;
+        
+        // Check if this is a file packet
+        if (selectedPacket.isFilePacket() && selectedPacket.getDecryptedFilePath() != null) {
+            // FILE SIGNATURE VERIFICATION
+            // For files, we need to compute the digest of the file content and verify signature on that digest
+            try {
+                java.io.File file = new java.io.File(selectedPacket.getDecryptedFilePath());
+                if (!file.exists()) {
+                    showAlert("Error", "Decrypted file not found: " + selectedPacket.getDecryptedFilePath());
+                    return;
+                }
+                
+                // Read file content and compute digest
+                byte[] fileContent = java.nio.file.Files.readAllBytes(file.toPath());
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] digest = md.digest(fileContent);
+                
+                // Convert digest to hex for display
+                StringBuilder digestHex = new StringBuilder();
+                for (byte b : digest) {
+                    digestHex.append(String.format("%02x", b));
+                }
+                
+                // Verify signature on the digest
+                PublicKey publicKey = signService.parsePemPublicKey(peerPublicKeyPem);
+                java.security.Signature signature = java.security.Signature.getInstance("SHA256withRSA");
+                signature.initVerify(publicKey);
+                signature.update(digest);
+                
+                byte[] signatureBytes = Base64.getDecoder().decode(selectedPacket.getBase64Signature());
+                boolean matches = signature.verify(signatureBytes);
+                
+                result = new VerifyResult(digestHex.toString(), digestHex.toString(), matches);
+                
+                addLog("INFO", "File Signature Verification", 
+                    "Verifying signature on file digest (" + fileContent.length + " bytes)");
+                
+            } catch (Exception e) {
+                showAlert("Error", "Failed to verify file signature: " + e.getMessage());
+                addLog("ERROR", "File Signature Verification Failed", e.getMessage());
+                return;
+            }
+        } else {
+            // TEXT MESSAGE SIGNATURE VERIFICATION
+            // Use original plaintext (without UI annotations) for verification
+            String plaintext = selectedPacket.getOriginalPlaintext();
+            if (plaintext == null || plaintext.isEmpty()) {
+                // Fallback to decrypted area text if originalPlaintext not set
+                plaintext = decryptedArea.getText();
+                if (plaintext.isEmpty()) {
+                    showAlert("Error", "Please decrypt the message first");
+                    return;
+                }
+            }
+            
+            result = signService.verify(
+                plaintext,
+                selectedPacket.getBase64Signature(),
+                peerPublicKeyPem
+            );
+        }
         
         verifySigField.setText(ByteFormat.truncate(selectedPacket.getBase64Signature()));
         signerDigestField.setText(result.getSignerDigestHex());

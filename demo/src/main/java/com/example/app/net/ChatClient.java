@@ -80,19 +80,24 @@ public class ChatClient {
         if (onMessage!=null) onMessage.accept("[system] disconnected");
     }
 
-    public void send(String text) {
-        // stub: echo back
+    public void send(String text) throws Exception {
         try {
             byte[] pt = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
             
+            if (onMessage != null) onMessage.accept("[TEXT] Signing plaintext: '" + text + "' (" + pt.length + " bytes)");
+            
             // Sign the plaintext before encryption
             byte[] signature = signData(pt);
+            
+            if (onMessage != null) onMessage.accept("[TEXT] Signature created: " + signature.length + " bytes, hash: " + java.util.Arrays.hashCode(pt));
             
             // Send encrypted plaintext
             sendFramed(1, pt);
             
             // Send signature (frame type 5)
             sendFramed(5, signature);
+            
+            if (onMessage != null) onMessage.accept("[TEXT] Message and signature sent");
         } catch (Exception ex) {
             if (onMessage!=null) onMessage.accept("send error: " + ex.getMessage());
         }
@@ -175,18 +180,22 @@ public class ChatClient {
         if (onMessage != null) onMessage.accept("[FILE] Creating file signature");
         
         byte[] digest = md.digest();
+        if (onMessage != null) onMessage.accept("[FILE] File digest: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 32) + "...");
+        
         java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
         sig.initSign(signingKey); sig.update(digest);
         byte[] signature = sig.sign();
         
+        if (onMessage != null) onMessage.accept("[FILE] Signature created: " + signature.length + " bytes");
+        
         if (encryptSignature) {
-            // encrypt signature with AES and send as normal framed message
-            if (onMessage != null) onMessage.accept("[FILE] Sending encrypted signature (type 5)");
-            sendFramed(5, signature);
+            // encrypt signature with AES and send as FILE signature frame (type 6)
+            if (onMessage != null) onMessage.accept("[FILE] Sending encrypted file signature (type 6)");
+            sendFramed(6, signature);
         } else {
-            // send signature as plaintext frame (ivLen=0)
-            if (onMessage != null) onMessage.accept("[FILE] Sending plaintext signature (type 5)");
-            out.writeInt(5);
+            // send signature as plaintext frame (ivLen=0, type 6 for file)
+            if (onMessage != null) onMessage.accept("[FILE] Sending plaintext file signature (type 6)");
+            out.writeInt(6);
             out.writeInt(0); // iv length = 0 -> indicates plaintext signature
             out.writeInt(signature.length); out.write(signature); out.flush();
         }

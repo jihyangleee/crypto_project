@@ -86,6 +86,20 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+// Configure compileJava to use JavaFX on module path
+tasks.named('compileJava') {
+	doFirst {
+		def javafxJars = configurations.compileClasspath.filter { f -> f.name.toLowerCase().contains('javafx') }
+		if (!javafxJars.empty) {
+			def javafxPath = javafxJars.collect { it.absolutePath }.join(File.pathSeparator)
+			options.compilerArgs += [
+				"--module-path", javafxPath,
+				"--add-modules", "javafx.controls,javafx.graphics,javafx.base,javafx.fxml"
+			]
+		}
+	}
+}
+
 // Task to run the new Secure Messaging UI
 task runSecureUI(type: JavaExec) {
 	description = 'Run the new Secure Messaging UI'

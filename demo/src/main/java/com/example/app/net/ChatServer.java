@@ -52,13 +52,15 @@ public class ChatServer {
         public final byte[] iv;
         public final String type; // "text" or "file"
         public final byte[] signature; // digital signature of plaintext
+        public final boolean signatureVerified; // signature verification result
         
-        public MessageData(String plaintext, byte[] ciphertext, byte[] iv, String type, byte[] signature) {
+        public MessageData(String plaintext, byte[] ciphertext, byte[] iv, String type, byte[] signature, boolean signatureVerified) {
             this.plaintext = plaintext;
             this.ciphertext = ciphertext;
             this.iv = iv;
             this.type = type;
             this.signature = signature;
+            this.signatureVerified = signatureVerified;
         }
     }
     
@@ -178,12 +180,36 @@ public class ChatServer {
                 } else if (type == TYPE_SIGNATURE) {
                     // Decrypt signature
                     byte[] signature = CryptoUtil.aesDecrypt(aesKey, ct, msgIv);
-                    log.accept("Received signature (" + signature.length + " bytes)");
+                    log.accept("Received text message signature (" + signature.length + " bytes)");
                     
-                    // Now notify UI with message and signature
+                    // Verify signature with client's public key
+                    boolean verified = false;
+                    if (lastPlaintext != null && clientPub != null) {
+                        try {
+                            // Debug: Log plaintext info
+                            String plaintextStr = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
+                            log.accept("Verifying signature for plaintext: '" + plaintextStr + "' (" + lastPlaintext.length + " bytes)");
+                            log.accept("Signature bytes (base64): " + java.util.Base64.getEncoder().encodeToString(signature).substring(0, Math.min(32, signature.length)));
+                            log.accept("Client public key available: " + (clientPub != null));
+                            
+                            java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+                            sig.initVerify(clientPub);
+                            sig.update(lastPlaintext);
+                            verified = sig.verify(signature);
+                            log.accept("Text message signature verify: " + verified + 
+                                " | Plaintext hash: " + java.util.Arrays.hashCode(lastPlaintext));
+                        } catch (Exception e) {
+                            log.accept("Signature verification error: " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                    } else {
+                        log.accept("Cannot verify signature - lastPlaintext: " + (lastPlaintext != null) + ", clientPub: " + (clientPub != null));
+                    }
+                    
+                    // Now notify UI with message and signature verification result
                     if (onMessageReceived != null && lastPlaintext != null) {
                         String msg = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
-                        MessageData data = new MessageData(msg, lastCiphertext, lastIv, "text", signature);
+                        MessageData data = new MessageData(msg, lastCiphertext, lastIv, "text", signature, verified);
                         onMessageReceived.accept(data);
                     }
                     
@@ -263,12 +289,17 @@ public class ChatServer {
                         currentFileSignature = sigBytes;
                         
                         byte[] digest = md.digest();
+                        log.accept("File digest computed: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 20) + "...");
+                        log.accept("Signature received: " + sigBytes.length + " bytes");
+                        log.accept("Using client public key: " + (clientPub != null ? "YES" : "NO"));
+                        
                         java.security.Signature signature = java.security.Signature.getInstance("SHA256withRSA");
                         signature.initVerify(clientPub);
                         signature.update(digest);
                         boolean ok = signature.verify(sigBytes);
                         currentFileSignatureVerified = ok;
-                        log.accept("File signature verify (over plaintext digest): " + ok);
+                        log.accept("File signature verify (over plaintext digest): " + ok + 
+                            " | Digest: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 32) + "...");
                     } else {
                         log.accept("signature received but no file context");
                     }

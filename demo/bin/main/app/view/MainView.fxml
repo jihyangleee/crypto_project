@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns:fx="http://javafx.com/fxml/1" 
+            fx:controller="com.example.app.ui.MainViewController"
+            stylesheets="@/App.css">
+    
+    <fx:define>
+        <ToggleGroup fx:id="modeGroup" />
+    </fx:define>
+    
+    <!-- Top Status Bar -->
+    <top>
+        <HBox styleClass="status-bar" spacing="15" alignment="CENTER_LEFT">
+            <padding><Insets top="10" right="15" bottom="10" left="15"/></padding>
+            
+            <Label text="🎭 Mode:" style="-fx-font-weight: bold;" />
+            <RadioButton fx:id="clientRadio" text="📤 CLIENT" toggleGroup="$modeGroup" selected="true" 
+                        style="-fx-font-weight: bold; -fx-text-fill: #2196F3;" />
+            <RadioButton fx:id="serverRadio" text="📥 SERVER" toggleGroup="$modeGroup" 
+                        style="-fx-font-weight: bold; -fx-text-fill: #4CAF50;" />
+            
+            <Separator orientation="VERTICAL" />
+            
+            <Label text="Host:" />
+            <TextField fx:id="hostField" text="127.0.0.1" prefWidth="120" />
+            <Label text="Port:" />
+            <TextField fx:id="portField" text="5000" prefWidth="60" />
+            <Button fx:id="connectBtn" text="Connect" onAction="#onConnect" 
+                    style="-fx-font-weight: bold; -fx-background-color: #FF9800; -fx-text-fill: white;" />
+            
+            <Separator orientation="VERTICAL" />
+            
+            <Label text="Status:" style="-fx-font-weight: bold;" />
+            <Label fx:id="statusLabel" text="Disconnected" styleClass="status-disconnected" 
+                   style="-fx-font-weight: bold;" />
+            
+            <Region HBox.hgrow="ALWAYS" />
+            
+            <Label text="RSA-2048 | AES-128-CBC | SHA-256" style="-fx-font-size: 11px; -fx-text-fill: #B0BEC5;" />
+        </HBox>
+    </top>
+    
+    <!-- Main Content: Left (Keys) | Center (Messages) | Right (Tabs) -->
+    <center>
+        <SplitPane dividerPositions="0.25, 0.75">
+            
+            <!-- LEFT PANEL: Key Management -->
+            <VBox spacing="10">
+                <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                
+                <TitledPane text="🔐 Key Management" expanded="true" collapsible="false">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                        
+                        <!-- Key Generation -->
+                        <VBox spacing="5">
+                            <Label text="Key Generation" styleClass="label-subheader" />
+                            <HBox spacing="5">
+                                <Button text="Generate Keys..." onAction="#onGenerateKeys" prefWidth="140" />
+                            </HBox>
+                        </VBox>
+                        
+                        <Separator />
+                        
+                        <!-- Key Operations -->
+                        <VBox spacing="5">
+                            <Label text="Key Operations" styleClass="label-subheader" />
+                            <HBox spacing="5">
+                                <Button text="Save Public" onAction="#onSavePublicKey" prefWidth="90" />
+                                <Button text="Load Public" onAction="#onLoadPublicKey" prefWidth="90" />
+                            </HBox>
+                            <HBox spacing="5">
+                                <Button text="Save Private" onAction="#onSavePrivateKey" prefWidth="90" styleClass="button-danger" />
+                                <Button text="Load Private" onAction="#onLoadPrivateKey" prefWidth="90" styleClass="button-danger" />
+                            </HBox>
+                        </VBox>
+                        
+                        <Separator />
+                        
+                        <!-- Public Key Summary -->
+                        <VBox spacing="5">
+                            <Label text="Public Key Summary" styleClass="label-subheader" />
+                            <HBox spacing="5">
+                                <Label text="Algorithm:" />
+                                <Label fx:id="keyAlgoLabel" text="None" style="-fx-font-weight: bold;" />
+                            </HBox>
+                            <HBox spacing="5">
+                                <Label text="Length:" />
+                                <Label fx:id="keyLengthLabel" text="-" style="-fx-font-weight: bold;" />
+                            </HBox>
+                            <VBox spacing="3">
+                                <Label text="Fingerprint (SHA-256):" />
+                                <TextArea fx:id="fingerprintArea" prefRowCount="2" editable="false" 
+                                         wrapText="true" styleClass="label-mono" />
+                            </VBox>
+                            <CheckBox fx:id="showPemCheck" text="Show PEM Preview" onAction="#onTogglePem" />
+                            <TextArea fx:id="pemPreview" prefRowCount="6" editable="false" 
+                                     wrapText="true" visible="false" managed="false" styleClass="label-mono" />
+                        </VBox>
+                        
+                        <Separator />
+                        
+                        <!-- Private Key Status -->
+                        <VBox spacing="5">
+                            <Label text="Private Key Status" styleClass="label-subheader" />
+                            <HBox spacing="5" alignment="CENTER_LEFT">
+                                <Label fx:id="privateKeyStatus" text="❌ Not Loaded" style="-fx-font-size: 14px;" />
+                            </HBox>
+                        </VBox>
+                    </VBox>
+                </TitledPane>
+            </VBox>
+            
+            <!-- CENTER PANEL: Message/File Sending -->
+            <VBox spacing="10">
+                <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                
+                <TitledPane text="📤 Send Message/File" expanded="true" collapsible="false">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                        
+                        <!-- Message Input -->
+                        <VBox spacing="5">
+                            <Label text="Message (Plaintext):" styleClass="label-subheader" />
+                            <TextArea fx:id="messageInput" promptText="Enter your message here..." 
+                                     prefRowCount="5" wrapText="true" />
+                        </VBox>
+                        
+                        <!-- File Attachment -->
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="Attachment:" />
+                            <Label fx:id="attachmentLabel" text="No file selected" style="-fx-text-fill: #757575;" />
+                            <Button text="Select File..." onAction="#onSelectFile" />
+                            <Button text="Clear" onAction="#onClearFile" styleClass="button-secondary" />
+                        </HBox>
+                        
+                        <!-- Options -->
+                        <VBox spacing="5">
+                            <CheckBox fx:id="encryptCheck" text="Encrypt with AES (session key wrapped with RSA)" selected="true" />
+                            <CheckBox fx:id="signCheck" text="Sign plaintext with private key" selected="true" />
+                        </VBox>
+                        
+                        <!-- Send Button -->
+                        <Button text="Send Message" onAction="#onSendMessage" 
+                               styleClass="button-primary" prefHeight="35" maxWidth="Infinity" />
+                        
+                        <Separator />
+                        
+                        <!-- Sent Packets Table -->
+                        <VBox spacing="5" VBox.vgrow="ALWAYS">
+                            <Label text="Transmitted Packets" styleClass="label-subheader" />
+                            <TableView fx:id="sentPacketsTable" VBox.vgrow="ALWAYS">
+                                <columns>
+                                    <TableColumn fx:id="timeCol" text="Time" prefWidth="120" />
+                                    <TableColumn fx:id="sizeCol" text="Size" prefWidth="80" />
+                                    <TableColumn fx:id="algoCol" text="Algorithm" prefWidth="150" />
+                                    <TableColumn fx:id="signedCol" text="Signed" prefWidth="60" />
+                                    <TableColumn fx:id="detailCol" text="" prefWidth="80" />
+                                </columns>
+                            </TableView>
+                        </VBox>
+                    </VBox>
+                </TitledPane>
+            </VBox>
+            
+            <!-- RIGHT PANEL: Tabs (Packet Details | Key List | Logs) -->
+            <TabPane tabClosingPolicy="UNAVAILABLE">
+                
+                <!-- Tab 1: Packet Details -->
+                <Tab text="Packet Details">
+                    <ScrollPane fitToWidth="true" fitToHeight="true">
+                        <VBox spacing="10">
+                            <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                            
+                            <Label text="Select a packet to view details" style="-fx-text-fill: #757575;" 
+                                   fx:id="noPacketLabel" />
+                            
+                            <VBox spacing="10" fx:id="packetDetailsBox" visible="false" managed="false">
+                                <!-- Cipher -->
+                                <VBox spacing="5">
+                                    <Label text="Ciphertext (Base64)" styleClass="label-subheader" />
+                                    <TextArea fx:id="cipherArea" prefRowCount="3" editable="false" 
+                                             wrapText="true" styleClass="label-mono" />
+                                    <CheckBox fx:id="showFullCipherCheck" text="Show full cipher" onAction="#onToggleFullCipher" />
+                                </VBox>
+                                
+                                <!-- Wrapped Key -->
+                                <VBox spacing="5">
+                                    <Label text="RSA Wrapped Session Key (Base64)" styleClass="label-subheader" />
+                                    <TextArea fx:id="wrappedKeyArea" prefRowCount="2" editable="false" 
+                                             wrapText="true" styleClass="label-mono" />
+                                    <CheckBox fx:id="showFullKeyCheck" text="Show full key" onAction="#onToggleFullKey" />
+                                </VBox>
+                                
+                                <!-- IV -->
+                                <VBox spacing="5">
+                                    <Label text="IV / Nonce (Base64)" styleClass="label-subheader" />
+                                    <TextField fx:id="ivField" editable="false" styleClass="label-mono" />
+                                </VBox>
+                                
+                                <!-- Signature -->
+                                <VBox spacing="5">
+                                    <Label text="Signature (Base64)" styleClass="label-subheader" />
+                                    <TextArea fx:id="signatureArea" prefRowCount="2" editable="false" 
+                                             wrapText="true" styleClass="label-mono" />
+                                    <CheckBox fx:id="showFullSigCheck" text="Show full signature" onAction="#onToggleFullSig" />
+                                </VBox>
+                                
+                                <!-- Decrypt Button -->
+                                <Button text="Decrypt Message" onAction="#onDecryptMessage" 
+                                       styleClass="button-primary" prefHeight="30" />
+                                
+                                <!-- Decrypted Text -->
+                                <VBox spacing="5" fx:id="decryptedBox" visible="false" managed="false">
+                                    <Label text="Decrypted Plaintext" styleClass="label-subheader" />
+                                    <TextArea fx:id="decryptedArea" prefRowCount="4" editable="false" wrapText="true" />
+                                </VBox>
+                                
+                                <Separator />
+                                
+                                <!-- Signature Verification -->
+                                <TitledPane text="🔍 Signature Verification" expanded="false">
+                                    <VBox spacing="10">
+                                        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                                        
+                                        <VBox spacing="5">
+                                            <Label text="Signature (Base64):" />
+                                            <TextField fx:id="verifySigField" editable="false" styleClass="label-mono" />
+                                        </VBox>
+                                        
+                                        <VBox spacing="5">
+                                            <Label text="Signer's Digest (Hex):" />
+                                            <TextField fx:id="signerDigestField" editable="false" styleClass="label-mono" />
+                                        </VBox>
+                                        
+                                        <VBox spacing="5">
+                                            <Label text="Local SHA-256(Plaintext) (Hex):" />
+                                            <TextField fx:id="localDigestField" editable="false" styleClass="label-mono" />
+                                        </VBox>
+                                        
+                                        <Button text="Verify Signature" onAction="#onVerifySignature" 
+                                               styleClass="button-primary" />
+                                        
+                                        <HBox spacing="10" alignment="CENTER_LEFT" fx:id="verifyResultBox" 
+                                             visible="false" managed="false">
+                                            <Label text="Result:" style="-fx-font-weight: bold;" />
+                                            <Label fx:id="verifyResultLabel" style="-fx-font-size: 14px;" />
+                                        </HBox>
+                                        
+                                        <Button text="Export as JSON" onAction="#onExportJson" 
+                                               styleClass="button-secondary" />
+                                    </VBox>
+                                </TitledPane>
+                            </VBox>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                
+                <!-- Tab 2: Received Public Keys -->
+                <Tab text="Key List">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                        
+                        <Label text="Received Public Keys" styleClass="label-header" />
+                        
+                        <TableView fx:id="keysTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="aliasCol" text="Alias" prefWidth="100" />
+                                <TableColumn fx:id="fpCol" text="Fingerprint" prefWidth="200" />
+                                <TableColumn fx:id="dateCol" text="Received" prefWidth="120" />
+                                <TableColumn fx:id="actionsCol" text="Actions" prefWidth="150" />
+                            </columns>
+                        </TableView>
+                        
+                        <TitledPane text="Key Details" expanded="false" fx:id="keyDetailsPane" disable="true">
+                            <VBox spacing="5">
+                                <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                                <Label text="Public Key (PEM):" styleClass="label-subheader" />
+                                <TextArea fx:id="keyDetailArea" prefRowCount="8" editable="false" 
+                                         wrapText="true" styleClass="label-mono" />
+                            </VBox>
+                        </TitledPane>
+                    </VBox>
+                </Tab>
+                
+                <!-- Tab 3: Logs -->
+                <Tab text="Logs">
+                    <VBox spacing="10">
+                        <padding><Insets top="10" right="10" bottom="10" left="10"/></padding>
+                        
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="System Logs" styleClass="label-header" />
+                            <Region HBox.hgrow="ALWAYS" />
+                            <Button text="Export Logs" onAction="#onExportLogs" styleClass="button-secondary" />
+                            <Button text="Clear" onAction="#onClearLogs" styleClass="button-danger" />
+                        </HBox>
+                        
+                        <TableView fx:id="logsTable" VBox.vgrow="ALWAYS">
+                            <columns>
+                                <TableColumn fx:id="logTimeCol" text="Time" prefWidth="120" />
+                                <TableColumn fx:id="logLevelCol" text="Level" prefWidth="70" />
+                                <TableColumn fx:id="logEventCol" text="Event" prefWidth="150" />
+                                <TableColumn fx:id="logDetailsCol" text="Details" prefWidth="300" />
+                            </columns>
+                        </TableView>
+                    </VBox>
+                </Tab>
+            </TabPane>
+        </SplitPane>
+    </center>
+</BorderPane>
