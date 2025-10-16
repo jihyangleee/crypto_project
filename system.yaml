@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 system:
   name: Secure Chat & File Transfer (JavaFX, Socket-based)
   version: 1.0.0
@@ -238,3 +239,245 @@ notes:
   - Persist directory keys in a JSON file with atomic writes.
 
 
+=======
+system:
+  name: Secure Chat & File Transfer (JavaFX, Socket-based)
+  version: 1.0.0
+  description: >-
+    System design for a JavaFX desktop secure chat and file transfer application using RSA (key exchange,
+    signatures) and AES-GCM (message/file encryption). This YAML describes components for Chat Server,
+    Chat Client, and Directory Server, message types, thread and I/O flows, and JavaFX MVC structure.
+
+components:
+  common:
+    ports:
+      chat_server_default: 5000
+      directory_server_default: 6000
+    crypto:
+      rsa:
+        key_size: 2048
+        padding: "RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
+        signature: "SHA256withRSA"
+      aes:
+        mode: "AES/GCM/NoPadding"
+        iv_length: 12
+        tag_length_bits: 128
+  chat_server:
+    description: "TCP server accepting 1:1 client connections (or multiple clients) and relaying messages/files."
+    main_class: com.example.app.net.ChatServer
+    responsibilities:
+      - Listen for TCP connections on configured port
+      - Maintain per-client sessions and public keys
+      - Persist file metadata (optional)
+    config:
+      port: ${chat_server_default}
+      max_clients: 32
+    threads:
+      - accept_thread: "Accepts new sockets and dispatches client handler threads"
+      - client_worker: "Per-connection handler for message framing and processing"
+    io:
+      framing: "length-prefixed binary / JSON-lines as secondary" 
+      keep_alive: true
+    events:
+      onClientConnected:
+        - action: authenticateOptional
+        - action: exchangePublicKey
+      onMessageReceived:
+        - action: decryptIfSessionKey
+        - action: routeOrPersist
+      onFileUpload:
+        - action: storeMeta
+        - action: storeBinary
+  chat_client:
+    description: "JavaFX client that can run in Server mode or Client mode for 1:1 chat/file transfer."
+    main_class: com.example.app.ui.Main
+    responsibilities:
+      - Provide JavaFX UI (mode toggle, key management, chat, file send)
+      - Manage KeyPair and local key storage
+      - Handle handshake: public key exchange, session key negotiation
+      - Encrypt/decrypt messages and files
+    config:
+      default_server_host: 127.0.0.1
+      default_server_port: ${chat_server_default}
+    threads:
+      - ui_thread: "JavaFX Application Thread (UI updates via Platform.runLater)"
+      - net_thread: "Network I/O thread per active connection"
+      - file_io_thread: "File read/write and chunking"
+    io:
+      transport: TCP sockets
+      framing: "JSON-lines for control messages, binary frames for payloads"
+    events:
+      ui:
+        onGenerateKeys: createKeyPair -> showPublicKey
+        onSaveKeys: serializePrivateKey
+        onLoadKeys: loadKeysFromPem
+        onConnect: startNetThread -> handshake
+        onSendChat: aesEncrypt -> send
+        onSendFile: chunkAndEncrypt -> sendChunks
+      network:
+        onConnectEstablished: sendPublicKey
+        onPubKeyReceived: storePeerKey
+        onSessKeyReceived: setAesKey
+        onChatCipherReceived: decryptAndDisplay
+        onFileChunkReceived: assembleAndSave
+  directory_server:
+    description: "Optional HTTP/TCP directory for name -> public key resolution."
+    main_class: com.example.app.net.DirectoryServer
+    responsibilities:
+      - Expose API for register (name -> public key), lookup, delete
+      - Persist keys to keys.json (or simple DB)
+    config:
+      port: ${directory_server_default}
+    io:
+      transport: HTTP (REST) or TCP-JSON
+    security:
+      - apiKey: header X-API-Key or JWT
+
+messages:
+  framing:
+    control: "JSON lines (UTF-8) with fields: type, payload, meta"
+    binary: "length-prefixed binary frames for chunks"
+  types:
+    PUBKEY:
+      description: "Public key exchange"
+      fields:
+        - name: type
+          type: string
+          example: PUBKEY
+        - name: payload
+          type: object
+          properties:
+            alg: string
+            format: string
+            key: string # PEM or base64 DER
+    SESSKEY:
+      description: "Session key exchange (RSA-encrypted AES key)"
+      fields:
+        - name: enc
+          type: string
+          example: RSA/ECB/OAEPWithSHA-256AndMGF1Padding
+        - name: key
+          type: string
+          description: base64 encoded AES key encrypted with recipient's public key
+    CHAT:
+      description: "Encrypted chat message over AES-GCM"
+      fields:
+        - name: mode
+          type: string
+          example: AES-GCM
+        - name: iv
+          type: string
+          description: base64 iv
+        - name: ct
+          type: string
+          description: base64 ciphertext+tag
+        - name: aad
+          type: string
+          description: optional base64 AAD
+        - name: plain_sample
+          type: string
+          description: example of expected decrypted payload
+    FILE_META:
+      description: "Metadata announcing incoming file transfer"
+      fields:
+        - name: name
+          type: string
+        - name: bytes
+          type: integer
+        - name: mode
+          type: string
+          example: AES-GCM
+    FILE_CHUNK:
+      description: "Chunk of file payload"
+      fields:
+        - name: seq
+          type: integer
+        - name: ct
+          type: string
+          description: base64 chunk ciphertext
+    FILE_END:
+      description: "End of file transfer marker"
+      fields: []
+
+threads_and_flows:
+  server_accept_flow:
+    - thread: accept_thread
+      action: listenSocket
+    - thread: accept_thread
+      action: acceptConnection
+    - thread: client_worker
+      action: startClientHandler
+  client_handler_flow:
+    - thread: client_worker
+      action: readFrame
+    - thread: client_worker
+      action: switch(type)
+    - thread: client_worker
+      action: handlePubKey | handleSessKey | handleChat | handleFileChunk
+    - thread: client_worker
+      action: sendAck
+
+io_channels:
+  sockets:
+    - name: control_channel
+      protocol: json-lines
+      encoding: utf-8
+    - name: data_channel
+      protocol: length-prefixed-binary
+      encoding: binary
+
+javafx:
+  views:
+    - name: main.fxml
+      controllers: com.example.app.controller.MainController
+      layout: |
+        - Top: Mode selector (Client/Server), status label
+        - Left: Key controls (Generate, Save, Load, Public key view)
+        - Center: Chat area (messages log showing ciphertext + plaintext), input field, send button
+        - Right: File controls (Select file, Send file, transfer log)
+    - name: settings.fxml
+      controllers: com.example.app.controller.SettingsController
+  controllers:
+    MainController:
+      responsibilities:
+        - handle UI actions and validation
+        - spawn network threads and coordinate with services
+        - update UI via Platform.runLater
+      exposed_methods:
+        - generateKeys()
+        - saveKeys(Path)
+        - loadKeys(Path)
+        - connect(host,port)
+        - startServer(port)
+        - sendMessage(text)
+        - sendFile(path)
+  models:
+    RSAKeyManager:
+      methods:
+        - generateKeyPair(bits:int)
+        - savePrivateKey(path)
+        - savePublicKey(path)
+        - loadPrivateKey(path)
+        - loadPublicKey(path)
+    AESCipher:
+      methods:
+        - newKey(bits:int)
+        - encrypt(key, iv12, plaintext, aad)
+        - decrypt(key, iv12, ciphertext, aad)
+
+edge_cases:
+  - no_keys_present:
+      user_action: generate_or_load_keys
+  - connection_drop:
+      recovery: retry/connect_ui_prompt
+  - partial_file_transfer:
+      recovery: resume_from_seq_or_restart
+
+notes:
+  - Use SecureRandom for IV and key generation.
+  - Always use 12-byte IV for AES-GCM; include tag with ciphertext.
+  - Prefer single-session AES key per connection; renew periodically.
+  - Persist directory keys in a JSON file with atomic writes.
+
+
+>>>>>>> 4a2c3952f257f3230eb3e88061be9598a0f5fbb8
