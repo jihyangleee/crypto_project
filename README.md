@@ -13,4 +13,4 @@
  한 컴퓨터 내에서 서로 다른 터미널에 아래와 같은 명령어를 작성하면
  두개의 창이 뜬다. 
 ```>cd d:\crypto_pro\demo
-   >.\gradlew.bat runSecureUI```
+   >.\gradlew.bat runSecureUI
