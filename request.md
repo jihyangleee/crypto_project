@@ -1,140 +1,210 @@
-\# 프로젝트: Java Spring Boot를 이용한 보안 채팅 및 파일 전송 프로그램 개발
+# JavaFX RSA/AES Secure Chat & File Transfer — Copilot Request
 
-
-
-\## 1. 프로젝트 개요
-
-
-
-\[cite\_start]이 프로젝트의 목표는 RSA와 AES 암호화 알고리즘을 사용하여 안전한 1:1 통신을 제공하는 클라이언트-서버 애플리케이션을 개발하는 것입니다\[cite: 10, 12, 13]. \[cite\_start]프로그램은 \*\*서버 모드\*\* 또는 \*\*클라이언트 모드\*\*로 동작할 수 있어야 하며\[cite: 21], 암호화된 채팅과 전자서명이 포함된 파일 전송 기능을 지원해야 합니다.
-
-
-
-\*\*기술 스택:\*\*
-
-\- \*\*언어:\*\* Java
-
-\- \*\*프레임워크:\*\* Spring Boot (Spring Shell을 이용한 CLI 기반)
-
-\- \*\*IDE:\*\* Visual Studio Code
-
-
+> 목적: 과제 요구사항(기본 + 확장)을 **JavaFX GUI 데스크톱 앱**으로 완성하기 위한 개발 요청서. VSCode + Copilot 환경에서 이 파일을 참고해 일관된 코드 생성을 유도합니다.  fileciteturn2file0
 
 ---
 
-
-
-\## 2. 기본 기능 요구사항 (Basic Assignment)
-
-
-
-\### 2.1. 통신 및 모드 설정
-
-\- 애플리케이션 실행 시 사용자가 \*\*서버\*\* 또는 \*\*클라이언트\*\* 모드를 선택할 수 있어야 합니다.
-
-\- \[cite\_start]\*\*서버 모드:\*\* 사용자가 지정한 포트 번호로 클라이언트의 연결을 대기합니다\[cite: 27].
-
-\- \[cite\_start]\*\*클라이언트 모드:\*\* 사용자가 입력한 서버의 IP 주소와 포트 번호로 연결을 시도합니다\[cite: 25].
-
-\- \[cite\_start]연결이 수립되면, 서버와 클라이언트는 1:1 채팅 및 파일 전송을 할 수 있습니다\[cite: 29, 30].
-
-\- \*\*네트워킹:\*\* Spring Boot 환경에서 TCP 소켓 통신을 구현합니다.
-
-
-
-\### 2.2. 암호화 및 보안 기능
-
-
-
-\#### A. RSA 키 관리
-
-\- \[cite\_start]\*\*키 생성:\*\* 2048비트 RSA 공개키/개인키 쌍을 생성하는 기능을 구현합니다\[cite: 35, 85].
-
-\- \[cite\_start]\*\*키 저장/불러오기:\*\* 생성된 키 쌍을 파일 형태로 저장하고, 파일로부터 불러올 수 있어야 합니다\[cite: 36].
-
-\- \[cite\_start]\*\*공개키 교환:\*\* 연결된 상대방과 자신의 공개키를 교환하는 기능을 구현합니다\[cite: 38].
-
-
-
-\#### B. 암호화된 채팅
-
-\- \*\*세션 키 교환:\*\*
-
-&nbsp;   1.  한쪽(예: 클라이언트)에서 임시 \*\*AES 대칭키(세션 키)\*\*를 생성합니다.
-
-&nbsp;   2.  생성된 AES 키를 상대방의 \*\*RSA 공개키\*\*로 암호화하여 전송합니다.
-
-&nbsp;   3.  \[cite\_start]상대방은 자신의 \*\*RSA 개인키\*\*로 암호화된 AES 키를 복호화하여 세션 키를 공유합니다\[cite: 44].
-
-\- \[cite\_start]\*\*메시지 암호화:\*\* 공유된 AES 세션 키를 사용하여 모든 채팅 메시지를 암호화하여 전송합니다\[cite: 40].
-
-\- \[cite\_start]\*\*메시지 복호화:\*\* 수신된 암호화 메시지를 AES 세션 키로 복호화하고, \*\*암호문과 복호화된 평문\*\*을 모두 화면에 출력합니다\[cite: 41].
-
-
-
-\#### C. 보안 파일 전송
-
-\- \*\*파일 암호화 및 서명 (두 기능 모두 구현):\*\*
-
-&nbsp;   1.  \[cite\_start]전송할 파일을 \*\*AES 세션 키\*\*로 암호화합니다\[cite: 43, 44].
-
-&nbsp;   2.  \[cite\_start]원본 파일(또는 암호화된 파일)의 해시값을 생성하고, 나의 \*\*RSA 개인키\*\*로 서명하여 \*\*전자서명\*\*을 만듭니다\[cite: 45].
-
-&nbsp;   3.  \[cite\_start]\*\*암호화된 파일\*\*과 \*\*전자서명\*\*을 함께 상대방에게 전송합니다\[cite: 46].
-
-\- \*\*파일 복호화 및 검증:\*\*
-
-&nbsp;   1.  \[cite\_start]수신자는 먼저 함께 받은 \*\*전자서명\*\*을 보낸 사람의 \*\*RSA 공개키\*\*로 검증하여 파일의 무결성을 확인합니다\[cite: 216].
-
-&nbsp;   2.  \[cite\_start]검증이 성공하면, \*\*AES 세션 키\*\*를 이용해 암호화된 파일을 복호화하여 원본 파일을 복원합니다\[cite: 218].
-
-
+## 0) 과제 맥락 요약 (필수/확장)
+- **기본**: Client/Server 소켓 통신, 채팅, 파일 전송, RSA 키쌍 생성/저장/불러오기, 공개키 교환, **AES로 채팅 암호화**, 수신측에서 **암호문과 복호문 동시 표시**.
+- **확장**: **Directory Server**(사용자명 ↔ 공개키 저장/조회)를 추가하고, Client가 이름으로 공개키를 요청해 획득. 서버는 자체 저장소 유지.
 
 ---
 
+## 1) 최종 목표 (Acceptance Criteria)
+다음 항목이 GUI에서 동작하고 시연 가능해야 합니다.
 
+### A. 통신 & 상태
+- [ ] 서버 모드에서 특정 포트로 대기, 클라이언트 모드에서 서버 IP/포트로 접속
+- [ ] 연결/해제 상태를 GUI에 표시 (상태 라벨/아이콘/로그)
+- [ ] 채팅(문자열) 송수신 + 파일 전송(任意 파일)
 
-\## 3. 사용자 인터페이스 (UI) - Spring Shell 기반 CLI
+### B. 암호 기능
+- [ ] **RSA 2048** 키쌍 생성, **PEM**(또는 DER)로 **저장/불러오기**
+- [ ] **공개키 교환**(연결 시 혹은 버튼으로 수동 전송)
+- [ ] **AES 대칭키 암호화 채널**: 채팅 메시지 암/복호
+  - 권장: **AES-GCM(128/256)** (무결성 포함). (과제 예제는 AES/ECB이나, 실제 구현은 GCM 권장)
+- [ ] 수신측 GUI에 **수신 암호문(hex/base64)** 과 **복호문(평문)** 을 **동시에** 표시
+- [ ] 파일 전송 시
+  - 옵션1: **RSA로 세션키 교환 후 AES로 파일 암호화**
+  - 옵션2: **파일에 전자서명(RSA-SHA256) 부착** (또는 둘 다)
 
+### C. 확장 과제 (Directory Server)
+- [ ] 별도 프로세스로 동작하는 **Directory Server** 실행
+- [ ] **이름으로 공개키 요청/응답** 가능
+- [ ] 서버가 **사용자명↔공개키 저장소**(파일/DB)를 유지
+- [ ] 클라이언트에서 **이름 입력 → 공개키 조회 → 캐시 저장/표시**
 
+### D. UI(슬라이드 예시 반영)
+- [ ] 모드 전환(클라이언트/서버), 연결 상태/상대 정보 표시
+- [ ] 키 생성/로드/세이브, 내 키/상대 키 정보 표시, “공개키 보내기”
+- [ ] 채팅 영역(입력창/전송 버튼/로그 뷰어)
+- [ ] 파일 선택/전송 버튼, 전송/수신 로그
 
-\- `@ShellComponent`를 사용하여 명령어 기반 인터페이스를 구현합니다.
-
-\- \*\*주요 명령어:\*\*
-
-&nbsp;   - `start-server --port 9999`: 서버 모드로 애플리케이션을 시작합니다.
-
-&nbsp;   - `connect --host 127.0.0.1 --port 9999`: 클라이언트 모드로 서버에 접속합니다.
-
-&nbsp;   - `gen-keys`: RSA 키 쌍을 생성하고 화면에 출력합니다.
-
-&nbsp;   - `save-keys --path ./mykeys`: 생성된 키를 파일에 저장합니다.
-
-&nbsp;   - `load-keys --path ./mykeys`: 파일에서 키를 불러옵니다.
-
-&nbsp;   - `exchange-key`: 상대방에게 내 공개키를 전송합니다.
-
-&nbsp;   - `send-msg <message>`: 암호화된 채팅 메시지를 보냅니다.
-
-&nbsp;   - `send-file --path <filepath>`: 파일을 암호화하고 서명하여 전송합니다.
-
-&nbsp;   - `exit`: 연결을 종료합니다.
-
-
+### E. 제출/재현성
+- [ ] **Gradle** 기반 빌드 스크립트 제공, `README`에 실행 방법 기재
+- [ ] **Eclipse/VSCode Import 가이드**(프로젝트 구조/의존성) 정리
 
 ---
 
+## 2) 아키텍처 (JavaFX 데스크톱, MVC 스타일)
 
+```
+app/
+ ├─ build.gradle
+ ├─ src/main/java/
+ │   └─ app/
+ │       ├─ Main.java                  // JavaFX 진입점(Stage/Scene)
+ │       ├─ controller/
+ │       │   ├─ MainController.java    // 연결/키/채팅/파일 전송 UI 이벤트
+ │       │   └─ SettingsController.java
+ │       ├─ view/                      // FXML & CSS
+ │       │   ├─ main.fxml
+ │       │   ├─ settings.fxml
+ │       │   └─ styles.css
+ │       ├─ model/
+ │       │   ├─ RSAKeyManager.java     // 키 생성/저장/불러오기(PEM/DER)
+ │       │   ├─ AESCipher.java         // AES-GCM (fallback: AES/ECB for demo)
+ │       │   ├─ SignatureService.java  // RSA-SHA256 서명/검증
+ │       │   └─ MessagePacket.java     // 직렬화용 DTO (JSON)
+ │       └─ net/
+ │           ├─ ChatServer.java        // ServerSocket accept, 클라 핸들러
+ │           ├─ ChatClient.java        // 서버 접속/송수신
+ │           ├─ DirectoryClient.java   // Directory Server 쿼리(Client)
+ │           └─ Protocol.java          // 프레이밍, JSON, 에러코드 등
+ └─ src/main/resources/
+     └─ app/view/ (FXML/CSS)
+```
 
-\## 4. 확장 기능 요구사항 (선택 사항)
+- **포트 예시**:  
+  - Chat/File Server: `5000`  
+  - Directory Server: `6000`
+- **데이터 포맷**: JSON Lines(한 메시지 = 한 줄), 바이너리는 base64 또는 첨부 프레임으로 전송.
+- **스레딩**: `ChatServer`는 클라이언트별 스레드/Executor, UI 업데이트는 `Platform.runLater`.
 
+---
 
+## 3) 네트워크 프로토콜 (간단 초안)
 
-\- \*\*디렉터리 서버 구축:\*\*
+### 3.1 프레이밍
+- 텍스트 라인 기반(JSON) + `\n` 종결
+- 필드: `type`, `payload`, `meta`
 
-&nbsp;   - \[cite\_start]별도의 Spring Boot 애플리케이션으로 \*\*디렉터리 서버\*\*를 구현합니다\[cite: 65].
+### 3.2 메시지 타입
+```json
+// 공개키 교환
+{ "type": "PUBKEY", "payload": { "alg": "RSA", "format": "PEM", "key": "<base64-PEM>" } }
 
-&nbsp;   - \[cite\_start]이 서버는 \*\*사용자 이름\*\*과 해당 사용자의 \*\*공개키\*\*를 Map이나 간단한 DB에 저장하고 관리합니다\[cite: 69, 76].
+// 세션키 교환(RSA로 AES 키 암호화)
+{ "type": "SESSKEY", "payload": { "enc": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding", "key": "<base64>" } }
 
-&nbsp;   - \[cite\_start]기본 클라이언트/서버 프로그램에서 `get-pubkey --username <이름>`과 같은 명령어로 디렉터리 서버에 특정 사용자의 공개키를 요청하고 받아올 수 있는 기능을 추가합니다\[cite: 66, 75].
+// 채팅(암호문 전송)
+{ "type": "CHAT", "payload": { "mode": "AES-GCM", "iv": "<b64>", "ct": "<b64>", "aad": "<b64-optional>" } }
 
+// 파일 전송(헤더 + 청크)
+{ "type": "FILE_META", "payload": { "name": "report.pdf", "bytes": 123456, "mode": "AES-GCM" } }
+{ "type": "FILE_CHUNK", "payload": { "seq": 1, "ct": "<b64>" } }
+{ "type": "FILE_END" }
+```
+
+### 3.3 무결성/인증
+- 권장: **AES-GCM**(내장 태그) 또는 **RSA-SHA256 전자서명** 동봉(`SIGN` 타입).
+
+---
+
+## 4) Directory Server (확장)
+- **프로세스**: `directory-server/` (간단한 TCP 또는 HTTP)
+- **저장소**: `keys.json` (예: `{ "alice": "-----BEGIN PUBLIC KEY-----..." }`)
+- **API (TCP-JSON 예시)**  
+  - 요청: `{ "op": "GET", "name": "alice" }`  
+  - 응답: `{ "ok": true, "name": "alice", "pubkey": "<PEM>" }` / `{ "ok": false, "error": "NOT_FOUND" }`
+- **클라 연동**: JavaFX 앱의 “공개키 조회” 버튼 → DirectoryClient 사용 → 결과 캐시 & 표시.
+
+---
+
+## 5) 보안 스펙
+- **RSA**: 2048-bit, OAEP(SHA-256) 권장. (예제는 단순 RSA/ECB, 과제 적합성을 위해 주석으로 안내)
+- **AES**: GCM(12-byte IV, 128-bit 태그) 권장. (예제 대비 안전)
+- **키 저장**: PEM(SubjectPublicKeyInfo, PKCS#8). 비밀키는 암호로 보호(optional).
+- **랜덤**: `SecureRandom`
+- **인증서/CA**: 범위 밖(필요 시 자기서명 X.509 확장 가능).
+
+---
+
+## 6) Copilot 지시(주석/프롬프트 예시)
+
+> 아래 코멘트를 파일 상단/클래스 상단에 넣어 Copilot이 맥락을 이해하고 일관되게 생성하도록 합니다.
+
+```java
+// GOAL: JavaFX GUI secure chat & file transfer app using RSA key exchange and AES-GCM for encryption.
+// REQUIREMENTS:
+// - Client/Server socket communication with connect/disconnect UI.
+// - RSA 2048 keypair generation, save/load PEM, public key exchange.
+// - Encrypted chat (show ciphertext and decrypted text on receiver).
+// - Encrypted file transfer using session key (RSA → AES-GCM).
+// - Optional: digital signature for integrity; Extended: Directory Server(name→pubkey).
+// ARCH: MVC with JavaFX (FXML Views, Controllers, Services). Use separate threads for network I/O.
+// Provide Gradle build and README with Eclipse/VSCode import instructions.
+```
+
+각 클래스에 구체적으로:
+```java
+// Copilot: Implement RSAKeyManager with methods:
+// - generateKeyPair(int bits)
+// - savePublicKeyPEM(PublicKey key, Path out)
+// - savePrivateKeyPEM(PrivateKey key, Path out, Optional<char[]> password)
+// - loadPublicKeyPEM(Path in)
+// - loadPrivateKeyPEM(Path in, Optional<char[]> password)
+// - toHex(byte[] b)
+
+// Copilot: Implement AESCipher (GCM) with methods:
+// - SecretKey newKey(int bits)
+// - byte[] encrypt(SecretKey key, byte[] iv12, byte[] plaintext, byte[] aad)
+// - byte[] decrypt(SecretKey key, byte[] iv12, byte[] ciphertext, byte[] aad)
+// - byte[] randomIV12()
+```
+
+```java
+// Copilot: Implement ChatServer with features:
+// - start(int port): accept loop with client handler threads
+// - broadcast/json framing utilities
+// - onPublicKeyReceived, onSessionKeyReceived, onChatCipherReceived
+// - integrate with Controller via listener/callback interfaces
+```
+
+```java
+// Copilot: Implement MainController (JavaFX):
+// - Bind buttons: StartServer/Connect/Disconnect/GenerateKeys/Load/Save/SendPubKey/QueryDirectory/SendChat/SendFile
+// - Update UI labels (connection status, peer info)
+// - For received chat: append both ciphertext (hex/base64) and decrypted plaintext to UI
+```
+
+---
+
+## 7) 작업 우선순위
+1) **순수 콘솔**로 네트워크/암호화 로직 프로토타입 → 단위 테스트
+2) JavaFX에 이식(컨트롤러에서 서비스 호출, UI 바인딩)
+3) 공개키 교환 → 세션키 교환 → 채팅 암호화 → 파일 암호화 전송
+4) Directory Server 추가(간단 TCP-JSON)
+5) README/Import 가이드, 스크린샷 & 시연 체크리스트
+
+---
+
+## 8) 빌드/실행 (Gradle 표준)
+- `gradle init` (Application, Java 17+), JavaFX 플러그인/모듈 추가
+- 실행: `./gradlew run` (Main.java)
+- 패키징: `./gradlew jlink` 또는 `jpackage` (선택)
+
+---
+
+## 9) 데모 체크리스트
+- [ ] 서버 시작(포트 표시), 클라이언트 접속(상태 갱신)
+- [ ] 키 생성/저장/불러오기, 공개키 교환 로그
+- [ ] 채팅 송신 → 상대 화면에 (암호문, 복호문) 모두 표시
+- [ ] 파일 선택/전송 → 수신 저장 성공(무결성 OK)
+- [ ] Directory Server로 이름 검색 → 공개키 획득 → 채팅/파일 동작 확인
+
+---
+
+## 10) 비고
+- 예제 코드(슬라이드)는 Java 표준 라이브러리 기반 RSA/AES 데모이며, 실제 구현은 GCM/PEM 등으로 현대화.
+- 수업 요구사항 충족이 1순위이므로, **GUI는 간결**, 기능은 **완전**하게.

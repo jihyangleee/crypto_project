@@ -16,7 +16,7 @@ java {
 }
 
 application {
-	mainClass = 'com.example.demo.ui.ChatApp'
+	mainClass = 'com.example.app.Main'
 }
 
 tasks.named('run', org.gradle.api.tasks.JavaExec) {
@@ -29,7 +29,14 @@ tasks.named('run', org.gradle.api.tasks.JavaExec) {
 			System.exit(1)
 		}
 		def javafxPath = javafxJars.collect { it.absolutePath }.join(File.pathSeparator)
-		jvmArgs = ["--module-path", javafxPath, "--add-modules", "javafx.controls,javafx.graphics,javafx.base"]
+		// Add exports/opens to allow FXMLLoader reflection into internal JavaFX packages when using the
+		// module path from Gradle. This is required for some JavaFX builds when running from Gradle.
+		jvmArgs = [
+			"--module-path", javafxPath,
+			"--add-modules", "javafx.controls,javafx.graphics,javafx.base,javafx.fxml",
+			"--add-exports", "javafx.graphics/com.sun.javafx.util=ALL-UNNAMED",
+			"--add-exports", "javafx.graphics/com.sun.javafx.application=ALL-UNNAMED"
+		]
 		classpath = sourceSets.main.runtimeClasspath
 	}
 }
@@ -63,6 +70,7 @@ dependencies {
 
 	implementation "org.openjfx:javafx-base:21:${javafxPlatform}"
 	implementation "org.openjfx:javafx-graphics:21:${javafxPlatform}"
+	implementation "org.openjfx:javafx-fxml:21:${javafxPlatform}"
 	implementation "org.openjfx:javafx-controls:21:${javafxPlatform}"
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -76,4 +84,29 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// Task to run the new Secure Messaging UI
+task runSecureUI(type: JavaExec) {
+	description = 'Run the new Secure Messaging UI'
+	group = 'application'
+	mainClass = 'com.example.app.ui.SecureMessagingApp'
+	classpath = sourceSets.main.runtimeClasspath
+	
+	doFirst {
+		def javafxJars = configurations.runtimeClasspath.filter { f -> f.name.toLowerCase().contains('javafx') }
+		if (javafxJars.empty) {
+			println 'ERROR: JavaFX jars not found on runtimeClasspath'
+			System.exit(1)
+		}
+		def javafxPath = javafxJars.collect { it.absolutePath }.join(File.pathSeparator)
+		jvmArgs = [
+			"--module-path", javafxPath,
+			"--add-modules", "javafx.controls,javafx.graphics,javafx.base,javafx.fxml",
+			"--add-exports", "javafx.graphics/com.sun.javafx.util=ALL-UNNAMED",
+			"--add-exports", "javafx.graphics/com.sun.javafx.application=ALL-UNNAMED",
+			"--add-opens", "javafx.graphics/javafx.scene=ALL-UNNAMED",
+			"--add-opens", "javafx.controls/javafx.scene.control=ALL-UNNAMED"
+		]
+	}
 }
