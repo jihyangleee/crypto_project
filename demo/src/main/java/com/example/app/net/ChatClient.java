@@ -7,7 +7,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 
 public class ChatClient {
     private boolean connected = false;
@@ -28,38 +27,53 @@ public class ChatClient {
     
     public java.security.PublicKey getPeerPublicKey() { return peerPublicKey; }
 
+    /**
+     * 서버에 연결하고 키 교환을 수행합니다.
+     * 순서: 1) 서버 공개키 받기 → 2) 내 공개키 보내기 → 3) AES 세션키 생성 후 암호화해서 전송
+     */
     public void connect(String host, int port, java.security.PublicKey myPublicKey, java.security.PrivateKey myPrivateKey) throws Exception {
-        // stub: assume immediate connection
+        // 서버에 소켓 연결
         socket = new Socket(host, port);
         in = new DataInputStream(socket.getInputStream());
         out = new DataOutputStream(socket.getOutputStream());
 
-        // Store my key pair
+        // 내 키페어를 저장해둠 (나중에 서명할 때 사용)
         this.myKeyPair = new KeyPair(myPublicKey, myPrivateKey);
 
-        // 1) read server public key
-        int len = in.readInt(); byte[] serverPub = new byte[len]; in.readFully(serverPub);
+        // 1) 서버의 RSA 공개키를 받아옴
+        int len = in.readInt(); 
+        byte[] serverPub = new byte[len]; 
+        in.readFully(serverPub);
         this.peerPublicKey = CryptoUtil.loadPublicKeyFromBytes(serverPub);
         
-        // Notify UI about received peer public key
+        // UI에 상대방 공개키 받았다고 알림
         if (onPeerKeyReceived != null) {
             onPeerKeyReceived.accept(peerPublicKey);
         }
 
-        // 2) send my public key
+        // 2) 내 RSA 공개키를 서버에게 보냄
         byte[] myPub = myPublicKey.getEncoded();
-        out.writeInt(myPub.length); out.write(myPub); out.flush();
+        out.writeInt(myPub.length); 
+        out.write(myPub); 
+        out.flush();
 
-        // 3) create AES key and send encrypted AES key
+        // 3) AES 세션키를 생성하고, 서버의 공개키로 암호화해서 전송
+        // 이렇게 하면 서버만 자신의 개인키로 복호화해서 세션키를 알 수 있음
         javax.crypto.SecretKey aes = javax.crypto.KeyGenerator.getInstance("AES").generateKey();
         byte[] aesRaw = aes.getEncoded();
-        byte[] encAes = CryptoUtil.rsaEncrypt(peerPublicKey, aesRaw);
-        out.writeInt(encAes.length); out.write(encAes); out.flush();
+        byte[] encAes = CryptoUtil.rsaEncrypt(peerPublicKey, aesRaw); // RSA로 AES키 래핑
+        out.writeInt(encAes.length); 
+        out.write(encAes); 
+        out.flush();
 
-        // send iv
-        iv = new byte[12]; new java.security.SecureRandom().nextBytes(iv);
-        out.writeInt(iv.length); out.write(iv); out.flush();
+        // AES-GCM에 사용할 IV(Initialization Vector) 전송
+        iv = new byte[12]; // GCM 표준 IV 크기
+        new java.security.SecureRandom().nextBytes(iv);
+        out.writeInt(iv.length); 
+        out.write(iv); 
+        out.flush();
 
+        // 이제 이 AES 키로 메시지를 암호화할 준비 완료
         this.aesKey = new javax.crypto.spec.SecretKeySpec(aesRaw, "AES");
 
         connected = true;
@@ -81,53 +95,61 @@ public class ChatClient {
         send(text, true, true); // Default: encrypt and sign
     }
     
+    /**
+     * 텍스트 메시지를 전송합니다.
+     * @param text 보낼 메시지
+     * @param encrypt true면 AES로 암호화, false면 평문 전송
+     * @param sign true면 RSA 개인키로 서명 추가
+     */
     public void send(String text, boolean encrypt, boolean sign) throws Exception {
         try {
             byte[] pt = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
             
             if (encrypt) {
-                // ENCRYPTED MODE
+                // 암호화 모드: AES-GCM으로 메시지 암호화
                 if (sign) {
+                    // 암호화 + 서명 모드
                     if (onMessage != null) onMessage.accept("[TEXT] Signing plaintext: '" + text + "' (" + pt.length + " bytes)");
                     byte[] signature = signData(pt);
                     if (onMessage != null) onMessage.accept("[TEXT] Signature created: " + signature.length + " bytes, hash: " + java.util.Arrays.hashCode(pt));
                     
-                    // Send encrypted plaintext
+                    // 평문을 암호화해서 전송 (TYPE_CHAT = 1)
                     sendFramed(1, pt);
-                    // Send signature (frame type 5)
+                    // 서명도 암호화해서 전송 (TYPE_SIGNATURE = 5)
                     sendFramed(5, signature);
                     
                     if (onMessage != null) onMessage.accept("[TEXT] Encrypted message and signature sent");
                 } else {
-                    // Just encrypt, no signature
+                    // 암호화만, 서명 없음
                     sendFramed(1, pt);
                     if (onMessage != null) onMessage.accept("[TEXT] Encrypted message sent (no signature)");
                 }
             } else {
-                // PLAINTEXT MODE (type 7)
+                // 평문 모드: 암호화 없이 그대로 전송 (TYPE_PLAINTEXT_CHAT = 7)
                 if (sign) {
+                    // 평문 + 서명 모드
                     if (onMessage != null) onMessage.accept("[TEXT] Sending as PLAINTEXT with signature");
                     byte[] signature = signData(pt);
                     
-                    // Send plaintext (type 7, no encryption)
+                    // 평문 메시지 전송 (암호화 안함)
                     this.out.writeInt(7); // TYPE_PLAINTEXT_CHAT
-                    this.out.writeInt(0);  // no IV
-                    this.out.writeInt(pt.length); // plaintext length
+                    this.out.writeInt(0);  // IV 없음
+                    this.out.writeInt(pt.length);
                     this.out.write(pt);
                     
-                    // Send plaintext signature (type 8)
+                    // 서명 전송 (암호화 안함)
                     this.out.writeInt(8); // TYPE_PLAINTEXT_SIGNATURE
-                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(0);  // IV 없음
                     this.out.writeInt(signature.length);
                     this.out.write(signature);
                     this.out.flush();
                     
                     if (onMessage != null) onMessage.accept("[TEXT] Plaintext message and signature sent");
                 } else {
-                    // Just plaintext, no signature
+                    // 평문만, 서명도 없음 (가장 기본 전송)
                     if (onMessage != null) onMessage.accept("[TEXT] Sending as PLAINTEXT (no signature)");
                     this.out.writeInt(7); // TYPE_PLAINTEXT_CHAT
-                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(0);  // IV 없음
                     this.out.writeInt(pt.length);
                     this.out.write(pt);
                     this.out.flush();
@@ -141,7 +163,8 @@ public class ChatClient {
     }
     
     /**
-     * Sign data with my private key using SHA256withRSA
+     * 데이터에 디지털 서명을 생성합니다.
+     * SHA256으로 해시한 후 RSA 개인키로 서명 (SHA256withRSA)
      */
     private byte[] signData(byte[] data) throws Exception {
         java.security.Signature signer = java.security.Signature.getInstance("SHA256withRSA");
@@ -168,11 +191,19 @@ public class ChatClient {
         }
     }
 
-    // File transfer helpers
+    /**
+     * 파일 전송 (기본값: 암호화 + 서명)
+     */
     public void sendFile(java.io.File f) throws Exception {
-        sendFile(f, true, true); // Default: encrypt and sign
+        sendFile(f, true, true);
     }
     
+    /**
+     * 파일을 전송합니다.
+     * @param f 전송할 파일
+     * @param encrypt true면 AES로 암호화, false면 평문 전송
+     * @param sign true면 파일 전체에 대한 서명 추가
+     */
     public void sendFile(java.io.File f, boolean encrypt, boolean sign) throws Exception {
         if (onMessage != null) {
             String mode = encrypt ? "ENCRYPTED" : "PLAINTEXT";
@@ -181,12 +212,15 @@ public class ChatClient {
         }
         
         java.security.PrivateKey signingKey = myKeyPair.getPrivate();
-        // read file and send meta
+        
+        // 1) 파일 메타데이터 준비 (파일명 + 파일 크기)
         byte[] nameB = f.getName().getBytes(java.nio.charset.StandardCharsets.UTF_8);
         java.io.ByteArrayOutputStream metaB = new java.io.ByteArrayOutputStream();
         java.io.DataOutputStream dos = new java.io.DataOutputStream(metaB);
-        dos.writeInt(nameB.length); dos.write(nameB);
-        dos.writeLong(f.length()); dos.flush();
+        dos.writeInt(nameB.length); 
+        dos.write(nameB);
+        dos.writeLong(f.length()); 
+        dos.flush();
         byte[] meta = metaB.toByteArray();
         
         if (onMessage != null) onMessage.accept("[FILE] Sending metadata frame");

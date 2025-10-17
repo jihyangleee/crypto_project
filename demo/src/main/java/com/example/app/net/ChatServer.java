@@ -8,7 +8,6 @@ import java.io.DataOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.KeyPair;
-import java.security.KeyPairGenerator;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.function.Consumer;
@@ -88,6 +87,10 @@ public class ChatServer {
         }
     }
 
+    /**
+     * 서버를 시작하고 클라이언트 연결을 받습니다.
+     * 키 교환 순서: 1) 서버 공개키 전송 → 2) 클라이언트 공개키 수신 → 3) 암호화된 AES 세션키 수신 및 복호화
+     */
     public void start(int port, Consumer<String> log, PublicKey myPublicKey, PrivateKey myPrivateKey) throws Exception {
         try (ServerSocket ss = new ServerSocket(port)) {
             running = true;
@@ -97,31 +100,38 @@ public class ChatServer {
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
 
-            // Use provided key pair instead of generating new one
+            // UI에서 받은 RSA 키페어 사용
             KeyPair kp = new KeyPair(myPublicKey, myPrivateKey);
             byte[] serverPub = myPublicKey.getEncoded();
-            // send server public key
-            out.writeInt(serverPub.length); out.write(serverPub); out.flush();
+            
+            // 1) 내 RSA 공개키를 클라이언트에게 전송
+            out.writeInt(serverPub.length); 
+            out.write(serverPub); 
+            out.flush();
             log.accept("Sent server public key (" + serverPub.length + " bytes)");
 
-            // read client public key
+            // 2) 클라이언트의 RSA 공개키를 받음 (서명 검증에 사용)
             int len = in.readInt();
-            byte[] clientPubB = new byte[len]; in.readFully(clientPubB);
+            byte[] clientPubB = new byte[len]; 
+            in.readFully(clientPubB);
             PublicKey clientPub = CryptoUtil.loadPublicKeyFromBytes(clientPubB);
             log.accept("Received client public key (" + len + " bytes)");
             
-            // Notify UI about received peer public key
+            // UI에 상대방 공개키 받았다고 알림
             if (onPeerKeyReceived != null) {
                 onPeerKeyReceived.accept(clientPub);
             }
 
-            // read encrypted AES key
-            int elen = in.readInt(); byte[] encAes = new byte[elen]; in.readFully(encAes);
-            byte[] aesRaw = CryptoUtil.rsaDecrypt(kp.getPrivate(), encAes);
+            // 3) 클라이언트가 보낸 암호화된 AES 세션키를 받아서 복호화
+            // 클라이언트는 내 공개키로 암호화했으므로, 내 개인키로만 복호화 가능
+            int elen = in.readInt(); 
+            byte[] encAes = new byte[elen]; 
+            in.readFully(encAes);
+            byte[] aesRaw = CryptoUtil.rsaDecrypt(kp.getPrivate(), encAes); // RSA 개인키로 복호화
             SecretKey aesKey = CryptoUtil.aesKeyFromBytes(aesRaw);
             log.accept("Received AES session key (decrypted)");
             
-            // Notify UI about wrapped session key
+            // UI에 세션키 정보 전달
             if (onSessionKeyReceived != null) {
                 SessionKeyData sessionData = new SessionKeyData(encAes);
                 onSessionKeyReceived.accept(sessionData);
@@ -187,25 +197,26 @@ public class ChatServer {
                 }
 
                 if (type == TYPE_CHAT) {
+                    // TYPE_CHAT(1): AES로 암호화된 메시지 수신
                     byte[] plain = CryptoUtil.aesDecrypt(aesKey, ct, msgIv);
                     String msg = new String(plain, java.nio.charset.StandardCharsets.UTF_8);
                     log.accept("Received encrypted message (" + plain.length + " bytes)");
                     
-                    // Store for signature verification
+                    // 서명 검증을 위해 평문과 암호문을 임시 저장
                     lastPlaintext = plain;
                     lastCiphertext = ct;
                     lastIv = msgIv;
                     
-                    // Wait briefly to check if a signature is coming
+                    // 서명 프레임이 올지 잠깐 대기 (50ms)
                     try {
-                        Thread.sleep(50); // 50ms wait for potential signature
+                        Thread.sleep(50);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
                     
-                    // Check if next frame is a signature by peeking at available data
+                    // 다음 데이터가 없으면 서명 없는 메시지로 간주
                     if (in.available() == 0) {
-                        // No signature coming - send message immediately
+                        // 서명 없음 - 바로 UI에 표시
                         if (onMessageReceived != null) {
                             MessageData data = new MessageData(msg, ct, msgIv, "text", null, false);
                             onMessageReceived.accept(data);
@@ -215,22 +226,24 @@ public class ChatServer {
                         lastCiphertext = null;
                         lastIv = null;
                     }
-                    // If data is available, wait for potential signature in next iteration
+                    // 데이터가 있으면 다음 루프에서 서명 처리
                 } else if (type == TYPE_SIGNATURE) {
-                    // Decrypt signature
+                    // TYPE_SIGNATURE(5): 암호화된 서명 수신 및 검증
                     byte[] signature = CryptoUtil.aesDecrypt(aesKey, ct, msgIv);
                     log.accept("Received text message signature (" + signature.length + " bytes)");
                     
-                    // Verify signature with client's public key
+                    // 클라이언트의 RSA 공개키로 서명 검증
                     boolean verified = false;
                     if (lastPlaintext != null && clientPub != null) {
                         try {
-                            // Debug: Log plaintext info
                             String plaintextStr = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
                             log.accept("Verifying signature for plaintext: '" + plaintextStr + "' (" + lastPlaintext.length + " bytes)");
                             log.accept("Signature bytes (base64): " + java.util.Base64.getEncoder().encodeToString(signature).substring(0, Math.min(32, signature.length)));
                             log.accept("Client public key available: " + (clientPub != null));
                             
+                            // SHA256withRSA 알고리즘으로 서명 검증
+                            // 1) 평문의 SHA-256 해시 계산
+                            // 2) 클라이언트 공개키로 서명 복호화해서 해시 비교
                             java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
                             sig.initVerify(clientPub);
                             sig.update(lastPlaintext);
