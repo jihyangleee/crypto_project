@@ -73,9 +73,10 @@ public class ChatServer {
         public final byte[] signature; // file signature
         public final byte[] decryptedContent; // Decrypted file content (for small files)
         public final boolean signatureVerified; // Signature verification result
+        public final boolean isPlaintext; // Whether file was sent as plaintext
         
         public FileData(String filename, long fileSize, String filePath, String decryptedFilePath, 
-                       byte[] signature, byte[] decryptedContent, boolean signatureVerified) {
+                       byte[] signature, byte[] decryptedContent, boolean signatureVerified, boolean isPlaintext) {
             this.filename = filename;
             this.fileSize = fileSize;
             this.filePath = filePath;
@@ -83,6 +84,7 @@ public class ChatServer {
             this.signature = signature;
             this.decryptedContent = decryptedContent;
             this.signatureVerified = signatureVerified;
+            this.isPlaintext = isPlaintext;
         }
     }
 
@@ -140,6 +142,12 @@ public class ChatServer {
             final int TYPE_FILE_CHUNK = 3;
             final int TYPE_FILE_END = 4;
             final int TYPE_SIGNATURE = 5;
+            final int TYPE_PLAINTEXT_CHAT = 7;
+            final int TYPE_PLAINTEXT_SIGNATURE = 8;
+            final int TYPE_PLAINTEXT_FILE_META = 9;
+            final int TYPE_PLAINTEXT_FILE_CHUNK = 10;
+            final int TYPE_PLAINTEXT_FILE_SIGNATURE = 11;
+            final int TYPE_PLAINTEXT_FILE_END = 12;
 
             java.io.DataOutputStream currentOut = null;
             java.io.DataOutputStream decryptedOut = null; // For decrypted file
@@ -165,6 +173,18 @@ public class ChatServer {
 
                 int msgIvLen = in.readInt(); byte[] msgIv = new byte[msgIvLen]; in.readFully(msgIv);
                 int ctlen = in.readInt(); byte[] ct = new byte[ctlen]; in.readFully(ct);
+                
+                // If we have a pending plaintext message without signature, send it now before processing new type
+                if (lastPlaintext != null && type != TYPE_SIGNATURE && type != TYPE_PLAINTEXT_SIGNATURE) {
+                    if (onMessageReceived != null) {
+                        String msg = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
+                        MessageData data = new MessageData(msg, lastCiphertext, lastIv, lastCiphertext == null ? "plaintext" : "text", null, false);
+                        onMessageReceived.accept(data);
+                    }
+                    lastPlaintext = null;
+                    lastCiphertext = null;
+                    lastIv = null;
+                }
 
                 if (type == TYPE_CHAT) {
                     byte[] plain = CryptoUtil.aesDecrypt(aesKey, ct, msgIv);
@@ -176,7 +196,26 @@ public class ChatServer {
                     lastCiphertext = ct;
                     lastIv = msgIv;
                     
-                    // Don't notify UI yet - wait for signature
+                    // Wait briefly to check if a signature is coming
+                    try {
+                        Thread.sleep(50); // 50ms wait for potential signature
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    
+                    // Check if next frame is a signature by peeking at available data
+                    if (in.available() == 0) {
+                        // No signature coming - send message immediately
+                        if (onMessageReceived != null) {
+                            MessageData data = new MessageData(msg, ct, msgIv, "text", null, false);
+                            onMessageReceived.accept(data);
+                            log.accept("Encrypted message sent to UI (no signature)");
+                        }
+                        lastPlaintext = null;
+                        lastCiphertext = null;
+                        lastIv = null;
+                    }
+                    // If data is available, wait for potential signature in next iteration
                 } else if (type == TYPE_SIGNATURE) {
                     // Decrypt signature
                     byte[] signature = CryptoUtil.aesDecrypt(aesKey, ct, msgIv);
@@ -210,6 +249,70 @@ public class ChatServer {
                     if (onMessageReceived != null && lastPlaintext != null) {
                         String msg = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
                         MessageData data = new MessageData(msg, lastCiphertext, lastIv, "text", signature, verified);
+                        onMessageReceived.accept(data);
+                    }
+                    
+                    // Clear stored data
+                    lastPlaintext = null;
+                    lastCiphertext = null;
+                    lastIv = null;
+                } else if (type == TYPE_PLAINTEXT_CHAT) {
+                    // Plaintext message (no encryption)
+                    byte[] plain = ct; // ct is actually plaintext in this case
+                    String msg = new String(plain, java.nio.charset.StandardCharsets.UTF_8);
+                    log.accept("Received PLAINTEXT message (" + plain.length + " bytes): " + msg);
+                    
+                    // Store for signature verification
+                    lastPlaintext = plain;
+                    lastCiphertext = null; // No ciphertext for plaintext messages
+                    lastIv = null; // No IV for plaintext messages
+                    
+                    // Wait briefly to check if a signature is coming
+                    try {
+                        Thread.sleep(50); // 50ms wait for potential signature
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    
+                    // Check if next frame is a signature by peeking at available data
+                    if (in.available() == 0) {
+                        // No signature coming - send message immediately
+                        if (onMessageReceived != null) {
+                            MessageData data = new MessageData(msg, null, null, "plaintext", null, false);
+                            onMessageReceived.accept(data);
+                            log.accept("Plaintext message sent to UI (no signature)");
+                        }
+                        lastPlaintext = null;
+                        lastCiphertext = null;
+                        lastIv = null;
+                    }
+                    // If data is available, wait for potential signature in next iteration
+                } else if (type == TYPE_PLAINTEXT_SIGNATURE) {
+                    // Plaintext signature
+                    byte[] signature = ct; // ct is actually plaintext signature
+                    log.accept("Received PLAINTEXT signature (" + signature.length + " bytes)");
+                    
+                    // Verify signature with client's public key
+                    boolean verified = false;
+                    if (lastPlaintext != null && clientPub != null) {
+                        try {
+                            String plaintextStr = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
+                            log.accept("Verifying plaintext signature for: '" + plaintextStr + "' (" + lastPlaintext.length + " bytes)");
+                            
+                            java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+                            sig.initVerify(clientPub);
+                            sig.update(lastPlaintext);
+                            verified = sig.verify(signature);
+                            log.accept("Plaintext message signature verify: " + verified);
+                        } catch (Exception e) {
+                            log.accept("Plaintext signature verification error: " + e.getMessage());
+                        }
+                    }
+                    
+                    // Notify UI with message and signature verification result
+                    if (onMessageReceived != null && lastPlaintext != null) {
+                        String msg = new String(lastPlaintext, java.nio.charset.StandardCharsets.UTF_8);
+                        MessageData data = new MessageData(msg, lastCiphertext, lastIv, "plaintext", signature, verified);
                         onMessageReceived.accept(data);
                     }
                     
@@ -330,7 +433,118 @@ public class ChatServer {
                                 decryptedOutFile != null ? decryptedOutFile.getAbsolutePath() : null,
                                 currentFileSignature,
                                 decryptedContent,
-                                currentFileSignatureVerified
+                                currentFileSignatureVerified,
+                                false  // Encrypted file
+                            );
+                            onFileReceived.accept(fileData);
+                        }
+                        
+                        // Reset file transfer state
+                        currentOut = null;
+                        decryptedOut = null;
+                        decryptedOutFile = null;
+                        decryptedBuffer = null;
+                        currentFileSignature = null;
+                        currentFileSignatureVerified = false;
+                        md = null;
+                        expectedSize = -1;
+                        received = 0;
+                        outFile = null;
+                        currentFileName = null;
+                        currentFileSize = 0;
+                        currentFileSignature = null;
+                    }
+                } else if (type == TYPE_PLAINTEXT_FILE_META) {
+                    // Plaintext file metadata
+                    byte[] plain = ct;
+                    java.io.DataInputStream ds = new java.io.DataInputStream(new java.io.ByteArrayInputStream(plain));
+                    int nameLen = ds.readInt(); byte[] nameB = new byte[nameLen]; ds.readFully(nameB);
+                    String fname = new String(nameB, java.nio.charset.StandardCharsets.UTF_8);
+                    long fsize = ds.readLong();
+                    log.accept("Incoming PLAINTEXT file: " + fname + " size=" + fsize);
+                    
+                    java.io.File dir = new java.io.File("received"); 
+                    if (!dir.exists()) dir.mkdirs();
+                    
+                    // For plaintext files, just save directly (no .encrypted file)
+                    outFile = new java.io.File(dir, fname);
+                    currentOut = new java.io.DataOutputStream(new java.io.FileOutputStream(outFile));
+                    
+                    // No separate decrypted file needed for plaintext
+                    decryptedOut = null;
+                    decryptedOutFile = outFile; // Same as outFile
+                    
+                    // Initialize buffer for small files (< 1MB)
+                    if (fsize < 1024 * 1024) {
+                        decryptedBuffer = new java.io.ByteArrayOutputStream();
+                    }
+                    
+                    md = java.security.MessageDigest.getInstance("SHA-256");
+                    expectedSize = fsize; received = 0;
+                    
+                    // Store file info for callback
+                    currentFileName = fname;
+                    currentFileSize = fsize;
+                } else if (type == TYPE_PLAINTEXT_FILE_CHUNK) {
+                    // Plaintext file chunk
+                    if (currentOut != null) {
+                        byte[] chunk = ct;
+                        currentOut.write(chunk);
+                        
+                        // Buffer for UI (if file is small)
+                        if (decryptedBuffer != null) {
+                            decryptedBuffer.write(chunk);
+                        }
+                        
+                        md.update(chunk);
+                        received += chunk.length;
+                        
+                        log.accept("received plaintext chunk, total bytes=" + received + " (expected=" + expectedSize + ")");
+                    }
+                } else if (type == TYPE_PLAINTEXT_FILE_SIGNATURE) {
+                    // Plaintext file signature
+                    if (outFile != null && md != null) {
+                        byte[] sigBytes = ct;
+                        
+                        // Store signature for callback
+                        currentFileSignature = sigBytes;
+                        
+                        byte[] digest = md.digest();
+                        log.accept("Plaintext file digest computed: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 20) + "...");
+                        log.accept("Plaintext signature received: " + sigBytes.length + " bytes");
+                        
+                        java.security.Signature signature = java.security.Signature.getInstance("SHA256withRSA");
+                        signature.initVerify(clientPub);
+                        signature.update(digest);
+                        boolean ok = signature.verify(sigBytes);
+                        currentFileSignatureVerified = ok;
+                        log.accept("Plaintext file signature verify: " + ok);
+                    } else {
+                        log.accept("plaintext signature received but no file context");
+                    }
+                } else if (type == TYPE_PLAINTEXT_FILE_END) {
+                    if (currentOut != null) {
+                        currentOut.close();
+                        log.accept("plaintext file transfer complete: " + (outFile!=null?outFile.getAbsolutePath():"?"));
+                        
+                        // Get buffered content
+                        byte[] decryptedContent = null;
+                        if (decryptedBuffer != null) {
+                            decryptedContent = decryptedBuffer.toByteArray();
+                            log.accept("plaintext content buffered: " + decryptedContent.length + " bytes");
+                        }
+                        
+                        // Notify UI about received file
+                        if (onFileReceived != null && outFile != null) {
+                            FileData fileData = new FileData(
+                                currentFileName,
+                                currentFileSize,
+                                outFile.getAbsolutePath(), // No separate encrypted file for plaintext
+                                outFile.getAbsolutePath(), // Same as outFile
+                                currentFileSignature,
+                                decryptedContent,
+                                currentFileSignatureVerified,
+                                true  // Plaintext file
                             );
                             onFileReceived.accept(fileData);
                         }

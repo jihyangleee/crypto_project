@@ -1,6 +1,2 @@
-first i got a a 
-
-
-second we have to study hard
-
-third we can learn coding with ai 
+THIS IS A PRACTICE FILE FOR CYPTO PROJECT
+RSA SHA AES 

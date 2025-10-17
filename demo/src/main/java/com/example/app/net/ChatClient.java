@@ -18,13 +18,10 @@ public class ChatClient {
     private DataInputStream in;
     private SecretKey aesKey;
     private byte[] iv;
-    private boolean encryptSignature = true;
     private java.security.PublicKey peerPublicKey; // Store peer's public key
     private java.security.KeyPair myKeyPair; // Store my key pair
     private java.util.function.Consumer<java.security.PublicKey> onPeerKeyReceived;
 
-    public void setEncryptSignature(boolean v) { this.encryptSignature = v; }
-    
     public void setOnPeerKeyReceived(java.util.function.Consumer<java.security.PublicKey> callback) {
         this.onPeerKeyReceived = callback;
     }
@@ -81,23 +78,63 @@ public class ChatClient {
     }
 
     public void send(String text) throws Exception {
+        send(text, true, true); // Default: encrypt and sign
+    }
+    
+    public void send(String text, boolean encrypt, boolean sign) throws Exception {
         try {
             byte[] pt = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
             
-            if (onMessage != null) onMessage.accept("[TEXT] Signing plaintext: '" + text + "' (" + pt.length + " bytes)");
-            
-            // Sign the plaintext before encryption
-            byte[] signature = signData(pt);
-            
-            if (onMessage != null) onMessage.accept("[TEXT] Signature created: " + signature.length + " bytes, hash: " + java.util.Arrays.hashCode(pt));
-            
-            // Send encrypted plaintext
-            sendFramed(1, pt);
-            
-            // Send signature (frame type 5)
-            sendFramed(5, signature);
-            
-            if (onMessage != null) onMessage.accept("[TEXT] Message and signature sent");
+            if (encrypt) {
+                // ENCRYPTED MODE
+                if (sign) {
+                    if (onMessage != null) onMessage.accept("[TEXT] Signing plaintext: '" + text + "' (" + pt.length + " bytes)");
+                    byte[] signature = signData(pt);
+                    if (onMessage != null) onMessage.accept("[TEXT] Signature created: " + signature.length + " bytes, hash: " + java.util.Arrays.hashCode(pt));
+                    
+                    // Send encrypted plaintext
+                    sendFramed(1, pt);
+                    // Send signature (frame type 5)
+                    sendFramed(5, signature);
+                    
+                    if (onMessage != null) onMessage.accept("[TEXT] Encrypted message and signature sent");
+                } else {
+                    // Just encrypt, no signature
+                    sendFramed(1, pt);
+                    if (onMessage != null) onMessage.accept("[TEXT] Encrypted message sent (no signature)");
+                }
+            } else {
+                // PLAINTEXT MODE (type 7)
+                if (sign) {
+                    if (onMessage != null) onMessage.accept("[TEXT] Sending as PLAINTEXT with signature");
+                    byte[] signature = signData(pt);
+                    
+                    // Send plaintext (type 7, no encryption)
+                    this.out.writeInt(7); // TYPE_PLAINTEXT_CHAT
+                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(pt.length); // plaintext length
+                    this.out.write(pt);
+                    
+                    // Send plaintext signature (type 8)
+                    this.out.writeInt(8); // TYPE_PLAINTEXT_SIGNATURE
+                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(signature.length);
+                    this.out.write(signature);
+                    this.out.flush();
+                    
+                    if (onMessage != null) onMessage.accept("[TEXT] Plaintext message and signature sent");
+                } else {
+                    // Just plaintext, no signature
+                    if (onMessage != null) onMessage.accept("[TEXT] Sending as PLAINTEXT (no signature)");
+                    this.out.writeInt(7); // TYPE_PLAINTEXT_CHAT
+                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(pt.length);
+                    this.out.write(pt);
+                    this.out.flush();
+                    
+                    if (onMessage != null) onMessage.accept("[TEXT] Plaintext message sent (no signature)");
+                }
+            }
         } catch (Exception ex) {
             if (onMessage!=null) onMessage.accept("send error: " + ex.getMessage());
         }
@@ -133,7 +170,15 @@ public class ChatClient {
 
     // File transfer helpers
     public void sendFile(java.io.File f) throws Exception {
-        if (onMessage != null) onMessage.accept("[FILE] Starting file transfer: " + f.getName() + " (" + f.length() + " bytes)");
+        sendFile(f, true, true); // Default: encrypt and sign
+    }
+    
+    public void sendFile(java.io.File f, boolean encrypt, boolean sign) throws Exception {
+        if (onMessage != null) {
+            String mode = encrypt ? "ENCRYPTED" : "PLAINTEXT";
+            String sigMode = sign ? " with signature" : " without signature";
+            onMessage.accept("[FILE] Starting " + mode + " file transfer" + sigMode + ": " + f.getName() + " (" + f.length() + " bytes)");
+        }
         
         java.security.PrivateKey signingKey = myKeyPair.getPrivate();
         // read file and send meta
@@ -144,13 +189,22 @@ public class ChatClient {
         dos.writeLong(f.length()); dos.flush();
         byte[] meta = metaB.toByteArray();
         
-        if (onMessage != null) onMessage.accept("[FILE] Sending metadata frame (type 2)");
-        sendFramed(2, meta);
+        if (onMessage != null) onMessage.accept("[FILE] Sending metadata frame");
+        if (encrypt) {
+            sendFramed(2, meta); // TYPE_FILE_META
+        } else {
+            // Send plaintext file metadata (type 9)
+            this.out.writeInt(9); // TYPE_PLAINTEXT_FILE_META
+            this.out.writeInt(0);  // no IV
+            this.out.writeInt(meta.length);
+            this.out.write(meta);
+            this.out.flush();
+        }
         if (onMessage != null) onMessage.accept("[FILE] Metadata sent successfully");
 
 
-        // send chunks; compute digest over plaintext (file content) then send encrypted chunks
-        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        // send chunks; compute digest over plaintext (file content) then send chunks
+        java.security.MessageDigest md = sign ? java.security.MessageDigest.getInstance("SHA-256") : null;
         int chunkCount = 0;
         long totalBytes = 0;
         
@@ -161,10 +215,23 @@ public class ChatClient {
             int r;
             while ((r=fis.read(buf))>0) {
                 byte[] chunk = java.util.Arrays.copyOf(buf, r);
-                // update digest with plaintext chunk
-                md.update(chunk);
-                // send encrypted chunk
-                sendFramed(3, chunk); // send encrypted chunk
+                // update digest with plaintext chunk if signing
+                if (md != null) {
+                    md.update(chunk);
+                }
+                
+                // send chunk (encrypted or plaintext)
+                if (encrypt) {
+                    sendFramed(3, chunk); // TYPE_FILE_CHUNK (encrypted)
+                } else {
+                    // Send plaintext chunk (type 10)
+                    this.out.writeInt(10); // TYPE_PLAINTEXT_FILE_CHUNK
+                    this.out.writeInt(0);  // no IV
+                    this.out.writeInt(chunk.length);
+                    this.out.write(chunk);
+                    this.out.flush();
+                }
+                
                 chunkCount++;
                 totalBytes += r;
                 
@@ -176,33 +243,45 @@ public class ChatClient {
         
         if (onMessage != null) onMessage.accept("[FILE] All chunks sent: " + chunkCount + " chunks, " + totalBytes + " total bytes");
 
-        // signature of ciphertext digest
-        if (onMessage != null) onMessage.accept("[FILE] Creating file signature");
-        
-        byte[] digest = md.digest();
-        if (onMessage != null) onMessage.accept("[FILE] File digest: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 32) + "...");
-        
-        java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
-        sig.initSign(signingKey); sig.update(digest);
-        byte[] signature = sig.sign();
-        
-        if (onMessage != null) onMessage.accept("[FILE] Signature created: " + signature.length + " bytes");
-        
-        if (encryptSignature) {
-            // encrypt signature with AES and send as FILE signature frame (type 6)
-            if (onMessage != null) onMessage.accept("[FILE] Sending encrypted file signature (type 6)");
-            sendFramed(6, signature);
-        } else {
-            // send signature as plaintext frame (ivLen=0, type 6 for file)
-            if (onMessage != null) onMessage.accept("[FILE] Sending plaintext file signature (type 6)");
-            out.writeInt(6);
-            out.writeInt(0); // iv length = 0 -> indicates plaintext signature
-            out.writeInt(signature.length); out.write(signature); out.flush();
+        // signature of file digest (if signing enabled)
+        if (sign && md != null) {
+            if (onMessage != null) onMessage.accept("[FILE] Creating file signature");
+            
+            byte[] digest = md.digest();
+            if (onMessage != null) onMessage.accept("[FILE] File digest: " + java.util.Base64.getEncoder().encodeToString(digest).substring(0, 32) + "...");
+            
+            java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+            sig.initSign(signingKey); sig.update(digest);
+            byte[] signature = sig.sign();
+            
+            if (onMessage != null) onMessage.accept("[FILE] Signature created: " + signature.length + " bytes");
+            
+            if (encrypt) {
+                // encrypt signature with AES and send as FILE signature frame (type 6)
+                if (onMessage != null) onMessage.accept("[FILE] Sending encrypted file signature (type 6)");
+                sendFramed(6, signature);
+            } else {
+                // send signature as plaintext (type 11 for plaintext file signature)
+                if (onMessage != null) onMessage.accept("[FILE] Sending plaintext file signature (type 11)");
+                this.out.writeInt(11); // TYPE_PLAINTEXT_FILE_SIGNATURE
+                this.out.writeInt(0); // no IV
+                this.out.writeInt(signature.length); 
+                this.out.write(signature); 
+                this.out.flush();
+            }
         }
 
-        // end
-        if (onMessage != null) onMessage.accept("[FILE] Sending end frame (type 4)");
-        sendFramed(4, new byte[0]);
+        // end frame
+        if (onMessage != null) onMessage.accept("[FILE] Sending end frame");
+        if (encrypt) {
+            sendFramed(4, new byte[0]); // TYPE_FILE_END
+        } else {
+            // Plaintext file end (type 12)
+            this.out.writeInt(12); // TYPE_PLAINTEXT_FILE_END
+            this.out.writeInt(0);  // no IV
+            this.out.writeInt(0);  // no data
+            this.out.flush();
+        }
         
         if (onMessage != null) onMessage.accept("[FILE] File transfer complete: " + f.getName());
     }

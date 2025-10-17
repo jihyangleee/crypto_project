@@ -320,19 +320,25 @@ public class MainViewController {
             chatServer.setOnMessageReceived(msgData -> {
                 Platform.runLater(() -> {
                     try {
-                        // Create packet from received encrypted data
-                        String base64Cipher = java.util.Base64.getEncoder().encodeToString(msgData.ciphertext);
-                        String base64Iv = java.util.Base64.getEncoder().encodeToString(msgData.iv);
+                        boolean isPlaintext = "plaintext".equals(msgData.type);
+                        
+                        // Create packet from received data
+                        String base64Cipher = msgData.ciphertext != null ? 
+                            java.util.Base64.getEncoder().encodeToString(msgData.ciphertext) : "[PLAINTEXT - No Encryption]";
+                        String base64Iv = msgData.iv != null ? 
+                            java.util.Base64.getEncoder().encodeToString(msgData.iv) : "[N/A]";
                         String base64Signature = msgData.signature != null ? 
                             java.util.Base64.getEncoder().encodeToString(msgData.signature) : "";
+                        
+                        String algorithm = isPlaintext ? "PLAINTEXT (No Encryption)" : "AES-128-GCM (Session Key)";
                         
                         Packet receivedPacket = new Packet(
                             UUID.randomUUID(),
                             Instant.now(),
                             msgData.signature != null, // Has signature
-                            "AES-128-GCM (Session Key)",
+                            algorithm,
                             base64Cipher,
-                            currentWrappedSessionKey, // RSA-wrapped AES session key
+                            isPlaintext ? "[N/A - Plaintext Mode]" : currentWrappedSessionKey,
                             base64Signature,
                             base64Iv,
                             msgData.plaintext.getBytes().length,
@@ -350,23 +356,30 @@ public class MainViewController {
                             plaintextWithStatus += "Algorithm: SHA256withRSA\n";
                             plaintextWithStatus += "Verified with: Client's Public Key";
                         }
+                        if (isPlaintext) {
+                            plaintextWithStatus += "\n\n[Note: This message was sent in PLAINTEXT without encryption]";
+                        }
                         receivedPacket.setPlaintext(plaintextWithStatus);
                         
                         sentPackets.add(receivedPacket);
+                        
+                        // Log with appropriate message type
+                        String typeLabel = isPlaintext ? "PLAINTEXT" : "ENCRYPTED";
                         
                         // Log with prominent signature verification status
                         if (msgData.signature != null) {
                             if (msgData.signatureVerified) {
                                 addLog("SUCCESS", "✓ Signature VERIFIED", 
-                                    "Message signature is VALID - authenticated from client (" + 
+                                    typeLabel + " message signature is VALID - authenticated from client (" + 
                                     msgData.plaintext.getBytes().length + " bytes)");
                             } else {
                                 addLog("ERROR", "✗ Signature FAILED", 
-                                    "Message signature is INVALID - verification failed! (" + 
+                                    typeLabel + " message signature is INVALID - verification failed! (" + 
                                     msgData.plaintext.getBytes().length + " bytes)");
                             }
                         } else {
-                            addLog("INFO", "Message Received", "Received encrypted " + msgData.type + " from client (" + 
+                            addLog("INFO", typeLabel + " Message Received", 
+                                "Received " + typeLabel.toLowerCase() + " message from client (" + 
                                 msgData.plaintext.getBytes().length + " bytes) [No signature]");
                         }
                     } catch (Exception e) {
@@ -379,6 +392,8 @@ public class MainViewController {
             chatServer.setOnFileReceived(fileData -> {
                 Platform.runLater(() -> {
                     try {
+                        boolean isPlaintext = fileData.isPlaintext;
+                        
                         String base64Signature = fileData.signature != null ? 
                             java.util.Base64.getEncoder().encodeToString(fileData.signature) : "";
                         
@@ -422,18 +437,27 @@ public class MainViewController {
                             plaintextContent += "Signature (Base64): " + base64Signature.substring(0, Math.min(64, base64Signature.length())) + "...\n";
                         }
                         
-                        // Add file path information
+                        // Add file path information and transmission mode
                         plaintextContent += "\n\n=== File Locations ===\n";
-                        plaintextContent += "Encrypted: " + fileData.filePath + "\n";
-                        if (fileData.decryptedFilePath != null) {
-                            plaintextContent += "Decrypted: " + fileData.decryptedFilePath;
+                        if (isPlaintext) {
+                            plaintextContent += "File: " + fileData.filePath + " (sent as PLAINTEXT)\n";
+                            plaintextContent += "\n[Note: This file was sent in PLAINTEXT without encryption]";
+                        } else {
+                            plaintextContent += "Encrypted: " + fileData.filePath + "\n";
+                            if (fileData.decryptedFilePath != null && !fileData.decryptedFilePath.equals(fileData.filePath)) {
+                                plaintextContent += "Decrypted: " + fileData.decryptedFilePath;
+                            }
                         }
                         
-                        // Prepare ciphertext content (read encrypted file)
+                        // Prepare ciphertext content
                         String ciphertextContent = "";
-                        try {
-                            java.io.File encryptedFile = new java.io.File(fileData.filePath);
-                            if (encryptedFile.exists() && encryptedFile.length() < 10240) { // < 10KB
+                        if (isPlaintext) {
+                            ciphertextContent = "[PLAINTEXT - No Encryption]\n\nFile was transmitted without encryption.";
+                        } else {
+                            // Read encrypted file
+                            try {
+                                java.io.File encryptedFile = new java.io.File(fileData.filePath);
+                                if (encryptedFile.exists() && encryptedFile.length() < 10240) { // < 10KB
                                 byte[] encryptedData = java.nio.file.Files.readAllBytes(encryptedFile.toPath());
                                 StringBuilder hexCipher = new StringBuilder("=== Encrypted File (Hex) ===\n");
                                 hexCipher.append("Format: [IV_LEN][IV][CT_LEN][CIPHERTEXT] (repeated per chunk)\n\n");
@@ -454,16 +478,21 @@ public class MainViewController {
                         } catch (Exception e) {
                             ciphertextContent = "[Error reading encrypted file: " + e.getMessage() + "]";
                         }
+                    }
+                        
+                    String algorithm = isPlaintext ? "PLAINTEXT (No Encryption)" : "AES-128-GCM + File Chunks";
+                    String wrappedKey = isPlaintext ? "[N/A - Plaintext Mode]" : (currentWrappedSessionKey != null ? currentWrappedSessionKey : "");
+                    String iv = isPlaintext ? "[N/A]" : "[Per-chunk IVs]";
                         
                         Packet filePacket = new Packet(
                             UUID.randomUUID(),
                             Instant.now(),
                             fileData.signature != null, // Has signature
-                            "AES-128-GCM + File Chunks",
+                            algorithm,
                             "[File: " + fileData.filename + "]",
-                            currentWrappedSessionKey != null ? currentWrappedSessionKey : "",
+                            wrappedKey,
                             base64Signature,
-                            "[Per-chunk IVs]",
+                            iv,
                             (int) fileData.fileSize,
                             "RX" // Received
                         );
@@ -477,10 +506,22 @@ public class MainViewController {
                         filePacket.setDecryptedFilePath(fileData.decryptedFilePath);
                         
                         sentPackets.add(filePacket);
-                        addLog("INFO", "File Received", "Received file: " + fileData.filename + " (" + 
-                            fileData.fileSize + " bytes)\nEncrypted: " + fileData.filePath + 
-                            (fileData.decryptedFilePath != null ? "\nDecrypted: " + fileData.decryptedFilePath : "") +
-                            (fileData.signature != null ? "\n✓ Signature verified" : ""));
+                        
+                        String typeLabel = isPlaintext ? "PLAINTEXT" : "ENCRYPTED";
+                        String logDetails = "Received " + typeLabel.toLowerCase() + " file: " + fileData.filename + " (" + 
+                            fileData.fileSize + " bytes)\n";
+                        if (isPlaintext) {
+                            logDetails += "File: " + fileData.filePath;
+                        } else {
+                            logDetails += "Encrypted: " + fileData.filePath;
+                            if (fileData.decryptedFilePath != null && !fileData.decryptedFilePath.equals(fileData.filePath)) {
+                                logDetails += "\nDecrypted: " + fileData.decryptedFilePath;
+                            }
+                        }
+                        if (fileData.signature != null) {
+                            logDetails += "\n✓ Signature " + (fileData.signatureVerified ? "VERIFIED" : "FAILED");
+                        }
+                        addLog("INFO", typeLabel + " File Received", logDetails);
                     } catch (Exception e) {
                         addLog("ERROR", "Failed to process received file", e.getMessage());
                     }
@@ -682,16 +723,22 @@ public class MainViewController {
         }
         
         try {
+            // Get checkbox states
+            boolean shouldEncrypt = encryptCheck.isSelected();
+            boolean shouldSign = signCheck.isSelected();
+            
             // Send text message first if not empty
             if (!plaintext.isEmpty()) {
-                addLog("DEBUG", "Sending Text", "Attempting to send " + plaintext.length() + " bytes");
-                chatClient.send(plaintext);
-                addLog("INFO", "Message Sent", plaintext.length() + " bytes sent to server (encrypted with AES session key)");
+                addLog("DEBUG", "Sending Text", "Attempting to send " + plaintext.length() + " bytes (encrypt=" + shouldEncrypt + ", sign=" + shouldSign + ")");
+                chatClient.send(plaintext, shouldEncrypt, shouldSign);
+                String mode = shouldEncrypt ? "encrypted" : "plaintext";
+                String sigMode = shouldSign ? " with signature" : " without signature";
+                addLog("INFO", "Message Sent", plaintext.length() + " bytes sent " + mode + sigMode);
             }
             
             // Then send file if selected
             if (selectedFile != null) {
-                addLog("DEBUG", "Sending File", "Attempting to send file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes)");
+                addLog("DEBUG", "Sending File", "Attempting to send file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes, encrypt=" + shouldEncrypt + ", sign=" + shouldSign + ")");
                 
                 if (!selectedFile.exists()) {
                     throw new Exception("File does not exist: " + selectedFile.getAbsolutePath());
@@ -701,8 +748,10 @@ public class MainViewController {
                 }
                 
                 // Send file
-                chatClient.sendFile(selectedFile);
-                addLog("INFO", "File Sent", selectedFile.getName() + " (" + selectedFile.length() + " bytes) sent to server");
+                chatClient.sendFile(selectedFile, shouldEncrypt, shouldSign);
+                String mode = shouldEncrypt ? "encrypted" : "plaintext";
+                String sigMode = shouldSign ? " with signature" : " without signature";
+                addLog("INFO", "File Sent", selectedFile.getName() + " (" + selectedFile.length() + " bytes) sent " + mode + sigMode);
                 
                 // Note: File packets are only shown on the receiver (server) side
             }

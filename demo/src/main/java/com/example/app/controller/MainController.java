@@ -76,8 +76,7 @@ public class MainController {
     decryptEncSigBtn.setOnAction(e -> onDecryptEncryptedSig());
     viewWrappedAesBtn.setOnAction(e -> onViewWrappedAes());
     decryptWrappedAesBtn.setOnAction(e -> onDecryptWrappedAes());
-    // propagate to client
-    encryptSigCheck.selectedProperty().addListener((obs,oldv,newv) -> client.setEncryptSignature(newv));
+    // Encryption and signature options are now set per-message in MainViewController
     verifySigBtn.setOnAction(e -> onVerifySignature());
 
     // wire log from ChatClient
