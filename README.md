@@ -1,4 +1,4 @@
-## Crypto Project 
+# Crypto Project 
 -암호화된 메시지와 파일을 server에게 전달하고 server가 그것을 복호화하여 평문을 얻는 프로젝트이다.
 
 [요구사항]
@@ -11,6 +11,8 @@
 
 - 프로그램 작동법
  한 컴퓨터 내에서 서로 다른 터미널에 아래와 같은 명령어를 작성하면
- 두개의 창이 뜬다. 
-```>cd d:\crypto_pro\demo
-```>.\gradlew.bat runSecureUI
+ 두개의 창이 뜬다. (자세한 작동방법과 이용방법은 영상으로도 확인가능하다.)
+ IDE는 VSCODE에서 실행했으며 깃헙에 올라와있는 폴더를 다운받아 사용하면 된다. 
+```>cd d:\crypto_pro\demo```
+```>.\gradlew.bat runSecureUI```
+
