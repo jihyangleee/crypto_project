@@ -14,9 +14,11 @@
  두개의 창이 뜬다.</br>
  (자세한 작동방법과 이용방법은 영상으로도 확인가능하다.-> https://youtu.be/OG8s7jI_9co)</br>
  IDE는 VSCODE에서 실행했으며 깃헙에 올라와있는 폴더를 다운받아 사용하면 된다.</br>
-```>cd d:\crypto_pro\demo```
-```>.\gradlew.bat runSecureUI```
-
+```git clone https://github.com/jihyangleee/crypto_project.git
+cd crypto_project/demo
+./gradlew build        
+./gradlew runSecureUI  
+```
 ---
 ### 프로그램 기본 설명
 
@@ -67,6 +69,7 @@
   5. 서버는 특정 클라이언트로부터 암호문, RSA 로 암호화된 대칭키, 서명인증 암호문을 받는다.
   6. 그 뒤 자신의 개인키로 대칭키를 복호화하고 그 대칭키를 활용해 암호문을 복호화한다.
   7. 서명인증 암호문은 클라이언트의 공개키로 해시값을 얻어내고 현재 복호화된 암호문을 해시함수로 계산하여 두 개의 해시값을 비교한다.
+
 
 
 
