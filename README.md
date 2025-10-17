@@ -44,13 +44,16 @@
 > 그 뒤에 ui 에서도 수동으로 signautre verification을 수행해주어 한번 더 검증해준다.
 
 <img width="894" height="510" alt="image" src="https://github.com/user-attachments/assets/848e8c81-ed11-4d1b-9269-9e4a4c4aae4d" />
+
 > 이번에는 파일을 평문으로 주고받는 과정이다.
 
 <img width="892" height="515" alt="image" src="https://github.com/user-attachments/assets/575a2ca5-87dd-4870-931b-ac892fd5c120" />
+
 > AES로 암호화 한 암호문, RSA로 암호화된 AES 키, 서명 인증 암호문을 서버가 받고 그것을 토대로 복호화한다. (전체적인 암호 및 복호화 흐름은 따로 정리할 것이다.)
   암호화된 메시지를 받았을 때와 마찬가지로 ui에서 수동으로 signature verification을 수행한다.
 
 <img width="509" height="271" alt="image" src="https://github.com/user-attachments/assets/f0c9551f-28a7-4359-9bda-3a7c636a647a" />
+
 > log를 통해 어떻게 암호문이 서버에서 처리되는 지 알 수 있다. 
 
 ---
@@ -64,6 +67,7 @@
   5. 서버는 특정 클라이언트로부터 암호문, RSA 로 암호화된 대칭키, 서명인증 암호문을 받는다.
   6. 그 뒤 자신의 개인키로 대칭키를 복호화하고 그 대칭키를 활용해 암호문을 복호화한다.
   7. 서명인증 암호문은 클라이언트의 공개키로 해시값을 얻어내고 현재 복호화된 암호문을 해시함수로 계산하여 두 개의 해시값을 비교한다.
+
 
 
 
